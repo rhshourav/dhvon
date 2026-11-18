@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en" data-t="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DHVON — Every Sound. Every Frame.</title>
+<meta name="description" content="DHVON is an offline-first, ad-free video and audio player for Android. Pro gestures, FFmpeg decoding, and a calm Now Playing screen.">
+<meta name="author" content="rhshourav">
+<meta name="theme-color" content="#08090D">
+<meta property="og:title" content="DHVON — Every Sound. Every Frame.">
+<meta property="og:description" content="Offline-first. Ad-free. A pro-grade Android video and music player.">
+<meta property="og:image" content="https://rhshourav.github.io/dhvon/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.png">
+<!-- DHVON site · designed & built by rhshourav · https://github.com/rhshourav/dhvon -->
+<style>
+:root{--bg:#08090D;--card:#171922;--el:#212432;--tx:#F5F7FA;--t2:#8E95A5;--ac:#5525E8;--cy:#22C8E8;--m1:#fff;--m2:#9BA3B4;--e:cubic-bezier(.2,.8,.2,1);--r:20px}
+[data-t=amoled]{--bg:#000;--card:#0e0e13;--el:#1a1a22}
+[data-t=light]{--bg:#f5f5f7;--card:#fff;--el:#e5e5ea;--tx:#1d1d1f;--t2:#6e6e73;--m1:#2b2b33;--m2:#9a9aa8}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--tx);font:17px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .5s var(--e),color .5s var(--e)}
+a{color:inherit;text-decoration:none}button{font:inherit;color:inherit}
+.w{max-width:1080px;margin:auto;padding:0 20px}
+section{padding:clamp(80px,13vw,150px) 0}
+h2{font-size:clamp(32px,6vw,64px);line-height:1.05;letter-spacing:-.035em;font-weight:700;max-width:14em}
+h2+p,.lead{color:var(--t2);font-size:clamp(17px,2vw,21px);max-width:34em;margin-top:18px}
+.g{background:linear-gradient(90deg,var(--ac),var(--cy));-webkit-background-clip:text;background-clip:text;color:transparent}
+.k{display:block;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--cy);margin-bottom:14px}
+.r{opacity:0;transform:translateY(28px);transition:opacity .9s var(--e),transform .9s var(--e);transition-delay:calc(var(--i,0)*60ms)}
+.r.in{opacity:1;transform:none}
+nav{position:fixed;inset:0 0 auto;z-index:9;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 max(20px,calc((100vw - 1080px)/2));background:rgba(8,9,13,.7);background:color-mix(in srgb,var(--bg) 70%,transparent);-webkit-backdrop-filter:saturate(180%) blur(22px);backdrop-filter:saturate(180%) blur(22px)}
+nav::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,var(--ac),var(--cy));transform:scaleX(var(--sp,0));transform-origin:left}
+.lg{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.22em;font-size:14px}
+.lg img{width:28px;height:28px;mix-blend-mode:screen}
+[data-t=light] .lg img{filter:invert(1);mix-blend-mode:multiply}
+nav ul{display:flex;gap:26px;list-style:none;font-size:13px;color:var(--t2)}
+nav ul a{transition:color .3s}nav ul a:hover{color:var(--tx)}
+.gh{font-size:13px;font-weight:600;padding:7px 14px;border-radius:99px;background:var(--el)}
+@media(max-width:760px){nav ul{display:none}}
+.b{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:99px;font-weight:600;font-size:16px;background:var(--el);transition:transform .35s var(--e),box-shadow .35s var(--e)}
+.b:hover{transform:translateY(-2px) scale(1.02)}.b:active{transform:scale(.97)}
+.b.p{background:var(--ac);color:#fff;box-shadow:0 10px 40px -8px var(--ac)}
+#hero{position:relative;min-height:100vh;min-height:100svh;display:grid;place-items:center;text-align:center;overflow:hidden;padding:90px 20px 60px}
+.hc{position:relative;z-index:1;transform:translateY(calc(var(--p,0)*-70px)) scale(calc(1 - var(--p,0)*.07));opacity:calc(1 - var(--p,0)*1.3);will-change:transform,opacity}
+.bars{display:flex;align-items:center;justify-content:center;gap:clamp(6px,1.4vw,13px);height:min(30vh,230px);margin-bottom:38px}
+.bars i{width:clamp(12px,3vw,28px);height:calc(var(--h)*1%);border-radius:99px;background:linear-gradient(var(--m1),var(--m2));animation:br 2.6s var(--e) infinite;animation-delay:calc(var(--d)*-.35s)}
+@keyframes br{50%{transform:scaleY(.6)}}
+h1{font-size:clamp(42px,9vw,104px);line-height:1;letter-spacing:-.04em;font-weight:700}
+.sub{color:var(--t2);font-size:clamp(17px,2.2vw,22px);max-width:30em;margin:22px auto 34px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.mini{margin-top:22px;font-size:13px;color:var(--t2);letter-spacing:.04em}
+.wave{position:absolute;inset:auto -10% -35% -10%;height:70%;background:radial-gradient(50% 60% at 30% 100%,var(--ac),transparent 70%),radial-gradient(40% 50% at 75% 100%,var(--cy),transparent 70%);opacity:.5;animation:dr 9s ease-in-out infinite alternate;pointer-events:none}
+@keyframes dr{to{transform:translateX(6%) scaleY(1.15)}}
+#hero.off *{animation-play-state:paused}
+.gr{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:48px}
+.c{position:relative;overflow:hidden;background:var(--card);border-radius:var(--r);padding:28px}
+.c h3{font-size:21px;letter-spacing:-.02em;margin-bottom:8px}
+.c p{color:var(--t2);font-size:16px}
+.c::before{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:linear-gradient(90deg,var(--ac),var(--cy));transform:scaleX(0);transform-origin:left;transition:transform 1.2s var(--e) .3s}
+.c.in::before{transform:none}
+#flow{height:320vh;position:relative;padding:0}
+.s0{position:sticky;top:0;height:100vh;height:100svh;display:grid;grid-template-columns:1fr auto;align-items:center;gap:6vw;max-width:1080px;margin:auto;padding:0 20px}
+.sts{position:relative;height:280px}
+.st{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;opacity:0;transform:translateY(24px);transition:opacity .6s var(--e),transform .6s var(--e)}
+.st.on{opacity:1;transform:none}
+.st h2{font-size:clamp(36px,6vw,68px)}
+.st p{color:var(--t2);font-size:clamp(17px,2vw,20px);max-width:24em;margin-top:14px}
+.sp{height:3px;width:200px;background:var(--el);border-radius:3px;overflow:hidden;margin-top:26px}
+.sp i{display:block;height:100%;background:linear-gradient(90deg,var(--ac),var(--cy));transform:scaleX(var(--fp,0));transform-origin:left}
+.ph{position:relative;width:min(300px,38vw);aspect-ratio:380/854;border-radius:44px;overflow:hidden;box-shadow:0 0 0 1px #ffffff1c,0 50px 120px -30px var(--ac)}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.04);transition:opacity .7s var(--e),transform .9s var(--e)}
+.ph img.on{opacity:1;transform:none}
+@media(max-width:780px){.s0{grid-template-columns:1fr;align-content:center;gap:22px}.ph{width:min(200px,50vw);margin:auto;order:-1}.sts{height:210px}}
+.sh{display:block;width:100%;height:auto;border-radius:34px;box-shadow:0 0 0 1px #ffffff18,0 40px 100px -30px var(--ac)}
+.vp{position:relative;max-width:760px;margin:44px auto 0;border-radius:28px;overflow:hidden;box-shadow:0 0 0 1px #ffffff1c,0 40px 100px -30px var(--ac);user-select:none;-webkit-user-select:none}
+.vp img{display:block;width:100%;height:auto}
+#gz{position:absolute;inset:0;touch-action:none;cursor:grab}
+#dim{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.sk{position:absolute;top:50%;translate:0 -50%;padding:10px 18px;border-radius:99px;background:#000a;color:#fff;font-weight:600;opacity:0;pointer-events:none}
+.sk.go{animation:sk .9s var(--e)}
+@keyframes sk{0%{opacity:0;transform:scale(.7)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+.hud{position:absolute;top:50%;translate:0 -50%;width:48px;padding:12px 0;border-radius:24px;background:#000a;color:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:11px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none}
+.hud.on{opacity:1}.hud.b{left:6%}.hud.v{right:6%}
+.hud s{position:relative;display:block;width:6px;height:90px;border-radius:3px;background:#fff3;overflow:hidden}
+.hud u{position:absolute;inset:0;background:#fff;transform-origin:bottom;transform:scaleY(var(--v,.5))}
+.sv{position:absolute;left:50%;top:16%;translate:-50% 0;padding:8px 16px;border-radius:99px;background:#000a;color:#fff;font-variant-numeric:tabular-nums;opacity:0;transition:opacity .2s;pointer-events:none}
+.sv.on{opacity:1}
+.hint{text-align:center;margin-top:16px;font-size:14px;color:var(--t2)}
+.mu,.lb{display:grid;gap:56px;align-items:center}
+.mu{grid-template-columns:.8fr 1.2fr}.lb{grid-template-columns:1.1fr .9fr}
+@media(max-width:800px){.mu,.lb{grid-template-columns:1fr}.mu .sh{max-width:280px;margin:auto}}
+#wf{display:flex;align-items:center;gap:3px;height:96px;cursor:pointer;touch-action:none}
+#wf i{flex:1;border-radius:3px;background:color-mix(in srgb,var(--t2) 35%,transparent);transition:background .3s}
+#wf i.pl{background:linear-gradient(var(--cy),var(--ac))}
+#wf i.hd{background:var(--cy);animation:pu .5s ease-in-out infinite alternate}
+@keyframes pu{to{transform:scaleY(1.3)}}
+.tm{display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:14px;color:var(--t2);font-variant-numeric:tabular-nums}
+.pp{width:52px;height:52px;border-radius:50%;border:0;background:#F5F7FA;color:#08090D;display:grid;place-items:center;cursor:pointer;transition:transform .3s var(--e)}
+.pp:active{transform:scale(.92)}.pp svg{width:24px;fill:currentColor}.pp .b2,.pp.on .a{display:none}.pp.on .b2{display:block}
+.eq{display:flex;gap:16px;height:130px;margin-bottom:18px}
+.eq div{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;color:var(--t2)}
+.eq i{flex:1;width:100%;max-width:56px;border-radius:10px;background:linear-gradient(var(--cy),var(--ac));transform:scaleY(var(--g,.5));transform-origin:bottom;transition:transform .7s var(--e)}
+.ch{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.ch button,.ch span{font-size:14px;font-weight:600;padding:9px 16px;border-radius:99px;background:var(--el);border:0;cursor:pointer;transition:background .3s var(--e),color .3s}
+.ch span{cursor:default;background:var(--card)}.ch .on{background:var(--ac);color:#fff}
+#fl{list-style:none}
+#fl li{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #ffffff10}
+#fl b{display:block}#fl small,#fl em{color:var(--t2);font-size:13px;font-style:normal}#fl em{margin-left:auto}
+.fi{width:30px;flex:none;fill:var(--ac)}
+.sb{height:8px;border-radius:8px;background:var(--el);overflow:hidden;margin:18px 0 8px}
+.sb i{display:block;height:100%;background:linear-gradient(90deg,var(--ac),var(--cy));transform:scaleX(0);transform-origin:left;transition:transform 1.4s var(--e) .4s}
+.in .sb i{transform:scaleX(.478)}
+.shots{position:relative;height:540px}
+.shots img{position:absolute;display:block;height:auto;border-radius:30px;box-shadow:0 0 0 1px #ffffff18,0 30px 80px -30px var(--ac)}
+.px1{left:0;top:0;width:58%;transform:translateY(calc((var(--lp,.5) - .5)*-70px))}
+.px2{right:0;bottom:0;width:72%;transform:translateY(calc((var(--lp,.5) - .5)*-130px))}
+@media(max-width:800px){.shots{height:460px}}
+.seg{display:inline-flex;background:var(--el);border-radius:99px;padding:4px;margin-bottom:18px}
+.seg button{padding:10px 26px;border-radius:99px;border:0;background:none;color:var(--t2);font-weight:600;cursor:pointer;transition:background .35s var(--e),color .35s}
+.seg .on{background:var(--ac);color:#fff}
+#dd{transition:opacity .18s,transform .18s;min-height:3em}#dd.sw{opacity:0;transform:translateY(6px)}
+.dl{text-align:center;background:var(--card);border-radius:36px;padding:clamp(40px,8vw,90px) 24px}
+.dl h2{margin:auto}.dl p{margin:14px auto 28px}
+pre{display:inline-block;text-align:left;background:var(--bg);border-radius:14px;padding:16px 20px;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t2);max-width:100%;overflow-x:auto;margin-top:34px}
+footer{padding:48px 0 64px;text-align:center;color:var(--t2);font-size:14px}
+footer .lg{justify-content:center;color:var(--tx);margin-bottom:14px}
+footer a{color:var(--tx);border-bottom:1px solid var(--ac)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition-duration:.01ms!important}html{scroll-behavior:auto}.r{opacity:1;transform:none}}
+</style>
+<noscript><style>.r{opacity:1;transform:none}.st:first-child{opacity:1}.ph img:first-child{opacity:1}</style></noscript>
+</head>
+<body>
+<nav><a class="lg" href="#hero"><img src="assets/favicon.png" alt="" width="28" height="28">DHVON</a>
+<ul><li><a href="#flow">Flow</a></li><li><a href="#player">Gestures</a></li><li><a href="#music">Music</a></li><li><a href="#lib">Library</a></li><li><a href="#engine">Engine</a></li><li><a href="#dl">Download</a></li></ul>
+<a class="gh" href="https://github.com/rhshourav/dhvon" rel="noopener">GitHub <span id="stars">★</span></a></nav>
+
+<header id="hero"><div class="wave"></div>
+<div class="hc">
+<div class="bars" aria-hidden="true"><i style="--h:17;--d:5"></i><i style="--h:36;--d:3"></i><i style="--h:64;--d:1"></i><i style="--h:76;--d:0"></i><i style="--h:66;--d:2"></i><i style="--h:56;--d:4"></i><i style="--h:36;--d:6"></i><i style="--h:17;--d:7"></i></div>
+<h1>Every Sound.<br><span class="g">Every Frame.</span></h1>
+<p class="sub">An offline-first, ad-free video and music player for Android. The gestures of a pro player, the calm of a Now Playing screen.</p>
+<div class="cta"><a class="b p apk" id="cta" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Download APK</a><a class="b" href="https://github.com/rhshourav/dhvon" rel="noopener">View on GitHub</a></div>
+<p class="mini">Offline-first · Ad-free · Source on GitHub</p>
+</div></header>
+
+<section id="why"><div class="w"><span class="k r">Principles</span><h2 class="r">Quiet by design. <span class="g">Loud where it counts.</span></h2>
+<div class="gr">
+<div class="c r" style="--i:0"><h3>Offline-first</h3><p>Your library already lives on your phone. Playing it never needs the internet.</p></div>
+<div class="c r" style="--i:1"><h3>Ad-free</h3><p>Nothing sits between you and the frame. No banners, no interruptions.</p></div>
+<div class="c r" style="--i:2"><h3>Scoped storage</h3><p>Reads media through MediaStore and the system picker. No all-files access requested.</p></div>
+</div></div></section>
+
+<div id="flow"><div class="s0">
+<div class="sts">
+<div class="st on"><span class="k">01 · Find</span><h2>Find it.</h2><p>A hero banner, filter chips and Recently Played put what you just watched one tap away.</p></div>
+<div class="st"><span class="k">02 · Resume</span><h2>Resume it.</h2><p>Exact progress is saved on-device. Tap once and you’re back at 48%.</p></div>
+<div class="st"><span class="k">03 · Play</span><h2>Play it.</h2><p>Speed, Quality and Audio sit under your thumb. Video or music, the same calm screen.</p></div>
+<div class="sp" style="position:absolute;bottom:-30px"><i></i></div>
+</div>
+<div class="ph"><img class="on" src="assets/home.webp" width="380" height="854" alt="DHVON Home screen"><img src="assets/resume.webp" width="456" height="956" alt="Continue Watching" loading="eager"><img src="assets/play.webp" width="382" height="854" alt="DHVON player" loading="eager"></div>
+</div></div>
+
+<section id="player"><div class="w"><span class="k r">Gestures</span><h2 class="r">Your thumbs <span class="g">know the way.</span></h2><p class="r">Try it. Double-tap the sides, drag the edges, slide across the middle.</p>
+<div class="vp r"><img src="assets/video.webp" width="552" height="499" alt="DHVON video player" loading="lazy"><div id="dim"></div><div id="gz"></div><div class="sk" id="sk"></div><div class="sv" id="sv"></div><div class="hud" id="hud"><span id="hl">VOL</span><s><u></u></s><b id="hv">70</b></div></div>
+<p class="hint r">Left edge: brightness · Right edge: volume · Middle: double-tap or slide to seek</p>
+<div class="gr">
+<div class="c r" style="--i:0"><h3>Double-tap</h3><p>±10 s with a running counter. Tap faster, skip further.</p></div>
+<div class="c r" style="--i:1"><h3>Slide to seek</h3><p>A live timestamp and delta, with keyframe snapping for smooth .mkv and .ts scrubbing.</p></div>
+<div class="c r" style="--i:2"><h3>Edges</h3><p>Brightness 0–100%. Volume up to 150%. Pinch to Fit, Fill or Stretch.</p></div>
+<div class="c r" style="--i:3"><h3>Screen lock</h3><p>One tap ignores every touch, so pockets and kids can’t interrupt.</p></div>
+</div></div></section>
+
+<section id="music"><div class="w mu">
+<div class="r"><img class="sh" src="assets/music.webp" width="439" height="585" loading="lazy" alt="DHVON Now Playing"></div>
+<div><span class="k r">Music</span><h2 class="r">See the song, <span class="g">not just a bar.</span></h2><p class="r">The waveform is the scrubber. Drag it and the sound is right under your finger.</p>
+<div class="c r" style="margin-top:28px"><div id="wf" aria-label="Waveform scrubber"></div><div class="tm"><span id="t1">01:12</span><button class="pp" id="pp" aria-label="Play or pause"><svg viewBox="0 0 24 24"><path class="a" d="M8 5v14l11-7z"/><path class="b2" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button><span>04:20</span></div></div>
+<div class="c r" style="margin-top:14px"><div class="eq" id="eq"></div><div class="ch" id="pr" style="margin:0"></div></div>
+</div></div></section>
+
+<section id="lib"><div class="w lb">
+<div><span class="k r">Library</span><h2 class="r">Folders, <span class="g">instantly.</span></h2><p class="r">Indexed MediaStore queries, not file crawling. Sort, search and batch-select without a stutter.</p>
+<div class="c r" style="margin-top:28px"><div class="ch" style="margin:0 0 12px"><button class="on" data-s="n">Name</button><button data-s="d">Date</button><button data-s="s">Size</button></div><ul id="fl"></ul><div class="sb"><i></i></div><small style="color:var(--t2)">Internal Storage · 61.2 GB / 128 GB</small></div></div>
+<div class="shots r"><img class="px1" src="assets/folders.webp" width="285" height="457" loading="lazy" alt="Folders"><img class="px2" src="assets/movies.webp" width="386" height="376" loading="lazy" alt="Movies grid"></div>
+</div></section>
+
+<section id="engine"><div class="w"><span class="k r">Engine</span><h2 class="r">If it exists, <span class="g">it plays.</span></h2><p class="r">Media3 with FFmpeg extensions. Pick how it decodes, per file and per moment.</p>
+<div class="c r" style="margin-top:36px"><div class="seg"><button class="on" data-d="HW">HW</button><button data-d="HWP">HW+</button><button data-d="SW">SW</button></div><p id="dd">Hardware decoding through MediaCodec: the coolest, longest-lasting way to play.</p></div>
+<div class="ch" id="fm"></div></div></section>
+
+<section id="themes"><div class="w"><span class="k r">Themes</span><h2 class="r">Make it <span class="g">yours.</span></h2><p class="r">Try it right here. This page wears the same four themes as the app.</p>
+<div class="ch r" id="th"><button class="on" data-th="obsidian">Obsidian</button><button data-th="amoled">AMOLED</button><button data-th="light">Light</button><button data-th="material">Material You</button></div></div></section>
+
+<section id="notes"><div class="w"><span class="k r">Nothing is decoration</span><h2 class="r">Every choice <span class="g">has a reason.</span></h2>
+<div class="gr">
+<div class="c r" style="--i:0"><h3>Obsidian #08090D</h3><p>OLED pixels at near-zero light. Less battery, deeper contrast, and the video is always the brightest thing.</p></div>
+<div class="c r" style="--i:1"><h3>Silver, then purple</h3><p>Silver is the logo’s metal. Purple only ever means “active”: the seekbar, the selected tab, this page’s top line.</p></div>
+<div class="c r" style="--i:2"><h3>System font</h3><p>No font download, no layout shift. SF Pro on Apple devices, Roboto on Android.</p></div>
+<div class="c r" style="--i:3"><h3>One easing curve</h3><p>Everything decelerates like a physical object, so motion feels caused, not played.</p></div>
+<div class="c r" style="--i:4"><h3>Transform and opacity</h3><p>The only properties the GPU animates without re-layout. That’s how it holds 60 fps.</p></div>
+<div class="c r" style="--i:5"><h3>Reduced motion</h3><p>If your OS asks for calm, every animation here yields.</p></div>
+</div></div></section>
+
+<section id="dl"><div class="w"><div class="dl r"><span class="k">Download</span><h2>Get <span class="g">DHVON.</span></h2><p id="ver">Checking the latest release…</p>
+<div class="cta"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Download APK</a><a class="b" href="https://github.com/rhshourav/dhvon" rel="noopener">Source code</a></div>
+<pre>git clone https://github.com/rhshourav/dhvon
+cd dhvon &amp;&amp; ./gradlew assembleRelease</pre><p id="note" style="margin-top:22px;font-size:14px"></p></div></div></section>
+
+<footer><div class="w"><div class="lg"><img src="assets/favicon.png" alt="" width="28" height="28">DHVON</div>
+<p>Designed &amp; built by <a href="https://github.com/rhshourav" rel="noopener">rhshourav</a> · <a href="https://github.com/rhshourav/dhvon" rel="noopener">Source on GitHub</a> · © <span id="yr"></span></p></div></footer>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)],cl=(v,a,b)=>Math.min(b,Math.max(a,v)),rm=matchMedia('(prefers-reduced-motion:reduce)').matches,R='rhshourav/dhvon';
+$('#fm').innerHTML='mkv ts avi mp4 flv webm mp3 flac aac ac3 eac3 dts opus wav'.split(' ').map((f,i)=>'<span class="r" style="--i:'+i+'">.'+f+'</span>').join('');
+$('#yr').textContent=new Date().getFullYear();
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+$$('.r').forEach(e=>io.observe(e));
+const nav=$('nav'),hero=$('#hero'),fw=$('#flow'),stp=$$('.st'),sim=$$('.ph img'),lib=$('#lib');let tk=0,cur=-1;
+new IntersectionObserver(([e])=>hero.classList.toggle('off',!e.isIntersecting)).observe(hero);
+function onS(){tk=0;const y=scrollY,h=innerHeight;
+nav.style.setProperty('--sp',(y/Math.max(1,document.documentElement.scrollHeight-h)).toFixed(4));
+if(y<h*1.2)hero.style.setProperty('--p',cl(y/h,0,1).toFixed(3));
+let r=fw.getBoundingClientRect();
+if(r.bottom>0&&r.top<h){const p=cl(-r.top/(r.height-h),0,.999),i=Math.floor(p*3);fw.style.setProperty('--fp',p.toFixed(3));if(i!==cur){cur=i;stp.forEach((e,k)=>e.classList.toggle('on',k===i));sim.forEach((e,k)=>e.classList.toggle('on',k===i))}}
+r=lib.getBoundingClientRect();if(r.bottom>0&&r.top<h)lib.style.setProperty('--lp',((h-r.top)/(h+r.height)).toFixed(3))}
+addEventListener('scroll',()=>{tk||(tk=requestAnimationFrame(onS))},{passive:true});addEventListener('resize',onS);onS();
+
+/* Gesture playground */
+const gz=$('#gz'),hud=$('#hud'),hl=$('#hl'),hv=$('#hv'),sk=$('#sk'),sv=$('#sv'),dim=$('#dim'),L={b:70,v:70};let lt=0,acc=0,at,dr;
+const fx=(e,c)=>{e.classList.remove(c);void e.offsetWidth;e.classList.add(c)};
+gz.onpointerdown=e=>{const b=gz.getBoundingClientRect(),x=(e.clientX-b.left)/b.width,n=performance.now();
+if(n-lt<300){const d=x<.5?-1:1;acc=Math.sign(acc)===d?acc+10*d:10*d;sk.textContent=(acc>0?'+':'')+acc+'s';sk.style.left=d<0?'10%':'auto';sk.style.right=d<0?'auto':'10%';fx(sk,'go');clearTimeout(at);at=setTimeout(()=>acc=0,1000)}
+lt=n;const z=x<.28?'b':x>.72?'v':'s';dr={x:e.clientX,y:e.clientY,z,s:L[z],h:b.height,w:b.width};gz.setPointerCapture(e.pointerId)};
+gz.onpointermove=e=>{if(!dr)return;const z=dr.z;
+if(z==='s'){const dx=e.clientX-dr.x;if(Math.abs(dx)<6)return;const s=Math.round(dx/dr.w*240),a=Math.abs(s);sv.textContent='18:25 ['+(s<0?'−':'+')+String(a/60|0).padStart(2,'0')+':'+String(a%60).padStart(2,'0')+']';sv.classList.add('on')}
+else{const m=z==='v'?150:100,v=cl(dr.s+(dr.y-e.clientY)/dr.h*m*1.3,0,m);L[z]=v;hud.className='hud on '+z;hl.textContent=z==='v'?'VOL':'BRT';hv.textContent=Math.round(v);hud.style.setProperty('--v',v/m);if(z==='b')dim.style.opacity=((1-v/100)*.7).toFixed(2)}};
+gz.onpointerup=gz.onpointercancel=()=>{dr=null;setTimeout(()=>{if(!dr){hud.classList.remove('on');sv.classList.remove('on')}},700)};
+
+/* Waveform scrubber */
+const wf=$('#wf'),t1=$('#t1'),N=72,B=[],T=260;let p=.28,pl=0,lt2=0,ph=-1;
+for(let i=0;i<N;i++){const b=document.createElement('i');b.style.height=Math.min(100,24+Math.abs(Math.sin(i*.45)*48+Math.sin(i*1.3)*26))+'%';B.push(b)}wf.append(...B);
+const f=s=>String(s/60|0).padStart(2,'0')+':'+String(s%60|0).padStart(2,'0');
+function draw(){const k=Math.floor(p*N);if(k!==ph){B.forEach((b,i)=>{b.classList.toggle('pl',i<k);b.classList.toggle('hd',i===k)});ph=k}t1.textContent=f(p*T)}
+function loop(t){if(!pl)return;p+=Math.min(t-lt2,100)/(T*1000);lt2=t;if(p>=1)p=0;draw();requestAnimationFrame(loop)}
+$('#pp').onclick=e=>{pl=!pl;e.currentTarget.classList.toggle('on',pl);if(pl){lt2=performance.now();requestAnimationFrame(loop)}};
+const sk2=e=>{const b=wf.getBoundingClientRect();p=cl((e.clientX-b.left)/b.width,0,.999);draw()};
+wf.onpointerdown=e=>{wf.setPointerCapture(e.pointerId);sk2(e);wf.onpointermove=sk2};wf.onpointerup=()=>wf.onpointermove=null;draw();
+
+/* Equalizer */
+const eq=$('#eq'),P={Flat:[.5,.5,.5,.5,.5],'Bass Boost':[.95,.8,.5,.4,.4],Vocal:[.3,.45,.85,.9,.5],Cinema:[.8,.55,.45,.75,.95],Custom:null};
+eq.innerHTML=['60','230','910','3.6k','14k'].map(h=>'<div><i></i><small>'+h+'</small></div>').join('');
+const bi=$$('i',eq),ap=g=>bi.forEach((e,i)=>e.style.setProperty('--g',.12+g[i]*.88));
+$('#pr').innerHTML=Object.keys(P).map((k,i)=>'<button'+(i?'':' class="on"')+'>'+k+'</button>').join('');
+$$('#pr button').forEach(b=>b.onclick=()=>{$$('#pr button').forEach(x=>x.classList.toggle('on',x===b));ap(P[b.textContent]||bi.map(()=>Math.random()*.8+.15))});ap(P.Flat);
+
+/* Folder sort with FLIP */
+const fo=[['Movies',24,'2.1 GB',2100,12,'Jul 12'],['Series',18,'1.4 GB',1400,10,'Jul 10'],['Music Videos',36,'1.2 GB',1200,8,'Jul 08'],['Concerts',12,'856 MB',856,5,'Jul 05'],['Others',20,'612 MB',612,1,'Jul 01']],fl=$('#fl');let sd={k:'n',d:1};
+fl.innerHTML=fo.map((x,i)=>'<li data-i="'+i+'"><svg class="fi" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><div><b>'+x[0]+'</b><small>'+x[1]+' items • '+x[2]+'</small></div><em>'+x[5]+'</em></li>').join('');
+$$('[data-s]').forEach(b=>b.onclick=()=>{const k=b.dataset.s;sd.d=sd.k===k?-sd.d:(k==='n'?1:-1);sd.k=k;$$('[data-s]').forEach(x=>x.classList.toggle('on',x===b));
+const li=[...fl.children],f0=new Map(li.map(l=>[l,l.getBoundingClientRect().top])),key={n:i=>fo[i][0],d:i=>fo[i][4],s:i=>fo[i][3]}[k];
+li.sort((a,c)=>{const x=key(+a.dataset.i),y=key(+c.dataset.i);return(x>y?1:x<y?-1:0)*sd.d});li.forEach(l=>fl.append(l));
+li.forEach(l=>{const dy=f0.get(l)-l.getBoundingClientRect().top;if(dy)l.animate([{transform:'translateY('+dy+'px)'},{transform:'none'}],{duration:rm?0:600,easing:'cubic-bezier(.2,.8,.2,1)'})})});
+
+/* Decoder modes */
+const dm={HW:'Hardware decoding through MediaCodec: the coolest, longest-lasting way to play.',HWP:'Hardware first, with wider codec and container coverage when a stream pushes the limits.',SW:'FFmpeg software decoding: the last resort that plays what nothing else will.'},dd=$('#dd');
+$$('[data-d]').forEach(b=>b.onclick=()=>{$$('[data-d]').forEach(x=>x.classList.toggle('on',x===b));dd.classList.add('sw');setTimeout(()=>{dd.textContent=dm[b.dataset.d];dd.classList.remove('sw')},180)});
+
+/* Themes */
+const TH=$$('[data-th]'),K=['--ac','--cy','--bg','--card','--el'],rs=document.documentElement;
+function setT(t){rs.dataset.t=t;TH.forEach(b=>b.classList.toggle('on',b.dataset.th===t));K.forEach(k=>rs.style.removeProperty(k));
+if(t==='material'){const h=Math.floor(Math.random()*360);[['--ac','hsl('+h+' 75% 58%)'],['--cy','hsl('+(h+50)%360+' 80% 60%)'],['--bg','hsl('+h+' 30% 7%)'],['--card','hsl('+h+' 25% 12%)'],['--el','hsl('+h+' 22% 17%)']].forEach(([k,v])=>rs.style.setProperty(k,v))}
+try{localStorage.setItem('dhvon-t',t)}catch(e){}}
+TH.forEach(b=>b.onclick=()=>setT(b.dataset.th));try{const s=localStorage.getItem('dhvon-t');s&&s!=='obsidian'&&setT(s)}catch(e){}
+
+/* Automation: latest release + stars (pre-fetched by the deploy workflow, live API as fallback) */
+const J=async u=>{const r=await fetch(u);if(!r.ok)throw 0;return r.json()};
+(async()=>{let rel,rp;
+try{rel=await J('release.json')}catch(e){}
+if(!rel||!rel.tag_name)try{rel=await J('https://api.github.com/repos/'+R+'/releases/latest')}catch(e){}
+try{rp=await J('repo.json')}catch(e){}
+if(!rp||rp.stars==null)try{rp={stars:(await J('https://api.github.com/repos/'+R)).stargazers_count}}catch(e){}
+if(rp&&rp.stars!=null)$('#stars').textContent='★ '+Intl.NumberFormat('en',{notation:'compact'}).format(rp.stars);
+if(rel&&rel.tag_name){const a=(rel.assets||[]).find(a=>/\.apk$/i.test(a.name));
+$('#ver').textContent=rel.tag_name+' · '+new Date(rel.published_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})+(a?' · '+(a.size/1048576).toFixed(1)+' MB':'');
+if(a)$$('.apk').forEach(x=>x.href=a.browser_download_url)}
+else $('#ver').textContent='Build it from source, or watch the repo for the first release.'})();
+if(/Android/i.test(navigator.userAgent))$$('.apk').forEach(x=>x.textContent='Download for Android');
+else $('#note').textContent='DHVON is an Android app. Open this page on your phone, or grab the APK here.';
+</script>
+</body>
+</html>

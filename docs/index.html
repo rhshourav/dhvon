@@ -85,8 +85,8 @@ h1{font-size:clamp(42px,9vw,104px);line-height:1;letter-spacing:-.04em;font-weig
 .chips span{padding:.5em 1em;border-radius:99px;background:var(--card);font-size:.9em;font-weight:600;white-space:nowrap}
 .chips .a{background:var(--ac);color:#fff}
 .bd{flex:1;min-height:0;overflow:hidden;padding:0 1.2em}
-.th{position:relative;overflow:hidden;border-radius:.9em;background:linear-gradient(165deg,var(--a),var(--b))}
-.th::after{content:"";position:absolute;inset:auto 0 0;height:56%;background:linear-gradient(var(--b),#0009);clip-path:polygon(0 100%,0 62%,28% 28%,44% 52%,62% 14%,100% 66%,100% 100%)}
+.th{position:relative;overflow:hidden;border-radius:.9em;background:#1b1d2a center/cover no-repeat}
+.th.sh::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,#000b)}
 .th.bg{position:absolute;inset:0;border-radius:0}
 .hero{position:relative;display:flex;flex-direction:column;justify-content:flex-end;height:10em;padding:1em 1.2em;border-radius:1.5em;overflow:hidden;color:#fff}
 .hero .th.bg{border-radius:inherit}.hero b{position:relative;font-size:1.45em;line-height:1.15}.hero small{position:relative;color:#fffc}
@@ -257,27 +257,26 @@ $('#yr').textContent=new Date().getFullYear();
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
 $$('.r').forEach(e=>io.observe(e));
 /* Phone templates: plain HTML/CSS on theme variables, so they restyle live with the page */
-const PAL=[['#f59e6b','#3a3f9a'],['#b085f5','#241a5e'],['#ff8fb1','#2b2a6e'],['#6ee7d8','#16335c'],['#ffb35c','#5b1f2d'],['#2dd47a','#04201a']],
-tn=(i,c='')=>'<div class="th '+c+'" style="--a:'+PAL[i%6][0]+';--b:'+PAL[i%6][1]+'"></div>',
+const tn=(k,c='')=>'<div class="th '+c+'" style="background-image:url(assets/c-'+k+'.webp)'+(k==='trail'?';background-position:68% 20%':'')+'"></div>',
 ic=n=>'<svg class="ic"><use href="#i-'+n+'"/></svg>',
 SB='<div class="sbar"><b>9:41</b><i class="bt"></i></div>',
 LG='<span class="lg"><img src="assets/favicon.png" alt="">DHVON</span>',
 TB=a=>'<div class="tabs">'+[['home','Home'],['folder','Library'],['list','Playlists'],['dots','More']].map((t,i)=>'<div'+(i===a?' class="a"':'')+'>'+ic(t[0])+t[1]+'</div>').join('')+'</div>',
 AB=t=>'<div class="ab">'+ic('back')+'<b>'+t+'</b>'+ic('search')+'</div>',
 HD=(t,m)=>'<div class="hd">'+t+'<small>'+m+'</small></div>',
-HR=(i,t,m)=>'<div class="hero">'+tn(i,'bg')+'<b>'+t+'</b><small>'+m+'</small><span class="pb">'+ic('play')+'</span></div>',
-RW=(a,o)=>'<div class="row">'+a.map((r,i)=>'<div>'+tn(i+o)+'<b>'+r[0]+'</b><small>'+r[1]+'</small></div>').join('')+'</div>',
+HR=(i,t,m)=>'<div class="hero">'+tn(i,'bg sh')+'<b>'+t+'</b><small>'+m+'</small><span class="pb">'+ic('play')+'</span></div>',
+RW=a=>'<div class="row">'+a.map(r=>'<div>'+tn(r[2])+'<b>'+r[0]+'</b><small>'+r[1]+'</small></div>').join('')+'</div>',
 WV=p=>'<div class="wv">'+Array.from({length:34},(_,i)=>'<i'+(i<34*p/100?' class="p"':'')+' style="height:'+(22+Math.abs(Math.sin(i*.5)*50+Math.sin(i*1.3)*22))+'%"></i>').join('')+'</div>',
 NP=(t,s,pl,p,w,a,b)=>'<div class="np">'+(w?WV(p):'<div class="pg"><i style="width:'+p+'%"></i></div>')+'<div class="tm2"><span>'+a+'</span><span>'+b+'</span></div><div class="ttl"><div><b>'+t+'</b><small>'+s+'</small></div>'+ic('heart')+'</div><div class="tr">'+ic('sh')+ic('prev')+'<span class="big">'+ic('pause')+'</span>'+ic('next')+ic('rp')+'</div><div class="pills">'+pl.map(x=>'<span>'+x+'</span>').join('')+'</div></div>',
 fo=[['Movies',24,'2.1 GB',2100,12,'Jul 12'],['Series',18,'1.4 GB',1400,10,'Jul 10'],['Music Videos',36,'1.2 GB',1200,8,'Jul 08'],['Concerts',12,'856 MB',856,5,'Jul 05'],['Others',20,'612 MB',612,1,'Jul 01']];
 const SC={
-home:SB+'<div class="ab">'+LG+ic('search')+'</div><div class="chips"><span class="a">All</span><span>Videos</span><span>Audios</span><span>Playlists</span></div><div class="bd">'+HR(1,'The Horizon','02:24:17 • 1080p')+HD('Recently Played','See All ›')+RW([['Dreamscape','12:45'],['Mystic Flow','20:13'],['Chill Vibes','45:20']],0)+HD('Your Music','See All ›')+RW([['LoFi Beats','120 tracks'],['Chill Mood','87 tracks'],['Workout','65 tracks']],3)+'</div>'+TB(0),
-resume:SB+'<div class="ab">'+LG+ic('search')+'</div><div class="bd">'+HR(2,'Your Media<br>Your Way','Play • Explore • Enjoy')+HD('Quick Access','')+'<div class="qa">'+[['play','Videos'],['music','Music'],['list','Playlists'],['folder','Folders']].map(q=>'<div>'+ic(q[0])+q[1]+'</div>').join('')+'</div>'+HD('Continue Watching','See All ›')+'<div class="cw">'+tn(0)+'<div><b>Epic Journey</b><div class="pg"><i style="width:48%"></i></div><small>48% watched</small></div><span class="pb">'+ic('play')+'</span></div></div>'+TB(0),
-play:'<div class="v">'+tn(0)+SB+'<div class="ab">'+ic('back')+'<span></span>'+ic('dots')+'</div></div>'+NP('Dreamscape','The Silent Journey',['Speed','Quality','Audio'],28,0,'12:34','45:20'),
-music:SB+'<div class="ab">'+ic('back')+'<b>Now Playing</b>'+ic('dots')+'</div><div class="art">'+tn(1)+'</div>'+NP('Dreamscape','The Silent Journey',['Lyrics','Equalizer','Queue'],28,1,'01:12','04:20'),
+home:SB+'<div class="ab">'+LG+ic('search')+'</div><div class="chips"><span class="a">All</span><span>Videos</span><span>Audios</span><span>Playlists</span></div><div class="bd">'+HR('hero1','The Horizon','02:24:17 • 1080p')+HD('Recently Played','See All ›')+RW([['Dreamscape','12:45','now'],['Mystic Flow','20:13','mystic'],['Chill Vibes','45:20','chill']])+HD('Your Music','See All ›')+RW([['LoFi Beats','120 tracks','lofi'],['Chill Mood','87 tracks','mood'],['Workout','65 tracks','run']])+'</div>'+TB(0),
+resume:SB+'<div class="ab">'+LG+ic('search')+'</div><div class="bd">'+HR('hero2','Your Media<br>Your Way','Play • Explore • Enjoy')+HD('Quick Access','')+'<div class="qa">'+[['play','Videos'],['music','Music'],['list','Playlists'],['folder','Folders']].map(q=>'<div>'+ic(q[0])+q[1]+'</div>').join('')+'</div>'+HD('Continue Watching','See All ›')+'<div class="cw">'+tn('trail')+'<div><b>Epic Journey</b><div class="pg"><i style="width:48%"></i></div><small>48% watched</small></div><span class="pb">'+ic('play')+'</span></div></div>'+TB(0),
+play:'<div class="v">'+tn('now')+SB+'<div class="ab">'+ic('back')+'<span></span>'+ic('dots')+'</div></div>'+NP('Dreamscape','The Silent Journey',['Speed','Quality','Audio'],28,0,'12:34','45:20'),
+music:SB+'<div class="ab">'+ic('back')+'<b>Now Playing</b>'+ic('dots')+'</div><div class="art">'+tn('art')+'</div>'+NP('Dreamscape','The Silent Journey',['Lyrics','Equalizer','Queue'],28,1,'01:12','04:20'),
 fold:SB+AB('Folders')+'<div class="bd">'+fo.map(x=>'<div class="fr">'+ic('folder')+'<div><b>'+x[0]+'</b><small>'+x[1]+' items • '+x[2]+'</small></div><em>'+x[5]+'</em></div>').join('')+'</div>'+TB(1),
-movies:SB+AB('Movies')+'<div class="bd"><div class="gd">'+[['Summit','2.3 GB'],['Orbit','1.9 GB'],['Nightfall','2.5 GB'],['Skyline','2.4 GB'],['Neon Rain','1.8 GB'],['Ember','2.7 GB']].map((m,i)=>'<div>'+tn(i,'pt')+'<b>'+m[0]+'</b><small>'+m[1]+'</small></div>').join('')+'</div></div>'+TB(1),
-vid:tn(0,'bg')+'<div class="top">'+ic('back')+'<b>Epic Journey.mp4</b><span>CC</span></div><div class="bot"><div class="pg"><i style="width:28%"></i></div><div class="tm2"><span>18:25</span><span>1:24:37</span></div><div class="ctl"><span>Lock</span><b>−10</b><span class="big">'+ic('pause')+'</span><b>+10</b><span>Fit</span></div></div>'};
+movies:SB+AB('Movies')+'<div class="bd"><div class="gd">'+[['Epic Journey','2.3 GB','trail'],['Dreamscape','1.9 GB','now'],['The Horizon','2.5 GB','hero1'],['Mystic Flow','2.4 GB','mystic'],['Blue Hour','1.8 GB','hero2'],['Silent Peak','2.7 GB','art']].map(m=>'<div>'+tn(m[2])+'<b>'+m[0]+'</b><small>'+m[1]+'</small></div>').join('')+'</div></div>'+TB(1),
+vid:tn('trail','bg')+'<div class="top">'+ic('back')+'<b>Epic Journey.mp4</b><span>CC</span></div><div class="bot"><div class="pg"><i style="width:28%"></i></div><div class="tm2"><span>18:25</span><span>1:24:37</span></div><div class="ctl"><span>Lock</span><b>−10</b><span class="big">'+ic('pause')+'</span><b>+10</b><span>Fit</span></div></div>'};
 $('#stk').innerHTML=[SC.home,SC.resume,SC.play].map((x,i)=>'<div class="sc'+(i?'':' on')+'">'+x+'</div>').join('');
 [['p-mu','music'],['p-fo','fold'],['p-mv','movies']].forEach(([id,k])=>$('#'+id).innerHTML='<div class="sc">'+SC[k]+'</div>');
 $('#s-vid').innerHTML=SC.vid;

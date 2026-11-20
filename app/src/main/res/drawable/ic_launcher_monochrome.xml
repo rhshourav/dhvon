@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_dhvon_mono"
+    android:insetLeft="24dp" android:insetRight="24dp" android:insetTop="28dp" android:insetBottom="28dp" />

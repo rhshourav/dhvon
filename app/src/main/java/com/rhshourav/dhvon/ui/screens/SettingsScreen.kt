@@ -17,7 +17,10 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import com.rhshourav.dhvon.ui.components.DhvonSeekBar
-import com.rhshourav.dhvon.ui.components.TextInputDialog
+import com.rhshourav.dhvon.ui.components.ExpandableColorPicker
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,7 +68,7 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
     val s by vm.settings.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
-    var customAccent by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
 
     Column(Modifier.fillMaxSize().background(p.background)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -77,16 +80,12 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { m -> DhvonChip(m.label, s.themeMode == m, { vm.setEnum(Keys.THEME, m) }) }
             }
-            Label("Accent colour")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AccentPresets.forEach { (_, argb) ->
-                    val selected = (s.accentArgb == argb) || (s.accentArgb == 0 && argb == AccentPresets.first().second && !s.accentCyan)
-                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color(argb)).clickable { vm.set(Keys.ACCENT_CYAN, false); vm.set(Keys.ACCENT_ARGB, argb) }, contentAlignment = Alignment.Center) {
-                        if (selected) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
-                }
-                OutlinedButton({ customAccent = true }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("Custom…", color = p.textPrimary) }
-            }
+            val effectiveAccent = if (s.accentArgb != 0) s.accentArgb else if (s.accentCyan) 0xFF22C8E8.toInt() else 0xFF5525E8.toInt()
+            ExpandableColorPicker(
+                title = "Accent colour", currentArgb = effectiveAccent, presets = AccentPresets.map { it.second },
+                onCommit = { vm.set(Keys.ACCENT_CYAN, false); vm.set(Keys.ACCENT_ARGB, it) },
+                onReset = { vm.set(Keys.ACCENT_CYAN, false); vm.set(Keys.ACCENT_ARGB, 0) },
+            )
             Text("Material You theme uses your wallpaper colours instead.", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
             Label("Library layout")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,6 +125,9 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
             SwitchRow("Keep screen on", "While a video is playing", s.keepScreenOn) { vm.set(Keys.KEEP_ON, it) }
             SwitchRow("Auto picture-in-picture", "Shrink the video to a window when you leave the app", s.autoPip) { vm.set(Keys.AUTO_PIP, it) }
             SwitchRow("Background audio play", "Keep playing video audio when the app is minimised", s.backgroundPlay) { vm.set(Keys.BG_PLAY, it) }
+            SwitchRow("Restore last session", "After Android closes the app, bring back your queue (paused) at the same spot", s.restoreSession) { vm.set(Keys.RESTORE_SESSION, it) }
+            OutlinedButton({ runCatching { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }) { Text("Background play keeps stopping? Battery settings", color = p.textPrimary) }
+            Text("Some phones (Xiaomi, Huawei, Samsung…) stop background audio unless DHVON is set to “Unrestricted / Don't optimise”.", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
 
             Section("Gestures")
             SliderRow("Seek sensitivity", s.seekSensitivity, 0.5f..2f) { vm.set(Keys.SEEK_SENS, it) }
@@ -148,6 +150,10 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
             SwitchRow("Pinch to zoom", "Two fingers to zoom and pan", s.gestureZoom) { vm.set(Keys.G_ZOOM, it) }
             SwitchRow("Double-tap to skip", "Off = a single tap just shows/hides the controls", s.gestureDoubleTap) { vm.set(Keys.G_DOUBLE, it) }
             SwitchRow("Show remaining time", "Count down instead of showing total length", s.showRemainingTime) { vm.set(Keys.REMAINING, it) }
+            Label("Edge buffer: ${s.edgeBufferDp} dp")
+            Slider(s.edgeBufferDp.toFloat(), { vm.set(Keys.EDGE_DP, (it / 4f).roundToInt() * 4) }, valueRange = 0f..64f, steps = 15,
+                colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = p.elevated))
+            Text("Swipes that start this close to a screen edge are ignored by the video player, so Android's back gesture never seeks or changes volume.", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
             Label("Hide controls after ${s.controlsHideSeconds}s")
             Slider(s.controlsHideSeconds.toFloat(), { vm.set(Keys.HIDE_SECS, it.roundToInt()) }, valueRange = 2f..10f, steps = 7,
                 colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = p.elevated))
@@ -172,12 +178,6 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
     }
     if (confirmReset) ConfirmDialog("Reset customisation?", "Theme, accent, text size, progress bars, gestures and Home layout go back to defaults. Your library, playlists and equalizer are untouched.", "Reset",
         { vm.resetCustomization(); confirmReset = false }, { confirmReset = false })
-    if (customAccent) TextInputDialog("Custom accent", "#5525E8", "Hex colour, e.g. #E8257A", "Apply",
-        onConfirm = { hex ->
-            val argb = runCatching { android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex") }.getOrNull()
-            if (argb != null) { vm.set(Keys.ACCENT_CYAN, false); vm.set(Keys.ACCENT_ARGB, argb) }
-            customAccent = false
-        }, onDismiss = { customAccent = false })
     if (confirmClear) ConfirmDialog("Clear watch history?", "Resume positions and “Recently played” will be reset. Your files are untouched.", "Clear",
         { vm.clearHistory(); confirmClear = false }, { confirmClear = false })
 }

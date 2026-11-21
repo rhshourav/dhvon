@@ -19,6 +19,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import com.rhshourav.dhvon.data.media.SubtitleParser
+import com.rhshourav.dhvon.data.media.WaveformExtractor
 import com.rhshourav.dhvon.data.media.SubtitleTrackEngine
 import com.rhshourav.dhvon.data.settings.*
 import com.rhshourav.dhvon.player.AudioEffectsController
@@ -76,6 +77,7 @@ class VideoPlayerViewModel @Inject constructor(
     val playback: PlaybackController,
     private val settingsRepo: SettingsRepository,
     val effects: AudioEffectsController,
+    private val waveform: WaveformExtractor,
 ) : ViewModel(), Player.Listener {
 
     val playerFlow = holder.playerFlow
@@ -85,6 +87,23 @@ class VideoPlayerViewModel @Inject constructor(
     val ui: StateFlow<VideoUiState> = _ui.asStateFlow()
     private val _cues = MutableStateFlow<List<Cue>>(emptyList())
     val cues: StateFlow<List<Cue>> = _cues.asStateFlow()
+
+    /** "Audio mode": the screen becomes an audio-player UI, the video renderer sleeps, sound keeps playing. */
+    private val _audioMode = MutableStateFlow(false)
+    val audioMode: StateFlow<Boolean> = _audioMode.asStateFlow()
+
+    fun setAudioMode(on: Boolean) {
+        _audioMode.value = on
+        holder.setVideoEnabled(!on)
+    }
+
+    /** Real waveform peaks of the playing file's audio track — only computed while audio mode is on. */
+    val peaks: StateFlow<FloatArray?> = combine(_audioMode, _ui.map { it.mediaKey }.distinctUntilChanged()) { on, key -> if (on) key else "" }
+        .distinctUntilChanged()
+        .mapLatest { key -> if (key.isEmpty()) null else waveform.peaks(key, 96) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun liveLevel(): Float = holder.audioProcessor.level
 
     private var attached: Player? = null
     private val externals = LinkedHashMap<String, SubtitleTrackEngine>()

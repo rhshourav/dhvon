@@ -45,6 +45,8 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,7 +85,11 @@ interface PlayerHost {
 private enum class HudKind { NONE, BRIGHTNESS, VOLUME, SEEK, ZOOM }
 
 /** One handler per recomposition; the gesture detector always reads the latest through rememberUpdatedState. */
+/** Strips along each screen edge where touches are ignored, so Android's back / home / notification gestures never move the video. */
+private class DeadZone(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
 private class GestureHandler(
+    val deadZone: DeadZone,
     val onTap: (Offset) -> Unit,
     val onSeekStart: () -> Unit, val onSeekDrag: (Float) -> Unit, val onSeekEnd: () -> Unit,
     val onBrightness: (Float) -> Unit, val onVolume: (Float) -> Unit, val onVerticalEnd: () -> Unit,
@@ -106,6 +112,10 @@ private suspend fun PointerInputScope.detect(handler: State<GestureHandler>) {
         val h = handler.value
         val width = size.width.toFloat()
         val height = size.height.toFloat()
+        val dz = h.deadZone
+        val at = down.position
+        // Started inside the edge buffer → this belongs to the system (back gesture etc.). Don't track it at all.
+        if (at.x < dz.left || at.x > width - dz.right || at.y < dz.top || at.y > height - dz.bottom) return@awaitEachGesture
         var mode = 0 // 0 undecided · 1 seek · 2 brightness · 3 volume · 4 zoom
         var total = Offset.Zero
         do {
@@ -153,6 +163,9 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     val ui by vm.ui.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cues by vm.cues.collectAsStateWithLifecycle()
+    val pb by vm.playback.state.collectAsStateWithLifecycle()
+    val audioMode by vm.audioMode.collectAsStateWithLifecycle()
+    val peaks by vm.peaks.collectAsStateWithLifecycle()
     val position by rememberPositionMs(player)
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -193,6 +206,10 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     BackHandler(enabled = menuOpen || locked) { if (menuOpen) menuOpen = false else lockHint = true }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        if (audioMode && !inPip) {
+            AudioModeUi(vm, player, ui, pb, settings, peaks, onShowVideo = { vm.setAudioMode(false) }, onClose = { host.finishPlayer() })
+            return@BoxWithConstraints
+        }
         val widthPx = constraints.maxWidth.toFloat()
         val fit = if (ui.videoWidth > 0 && ui.videoHeight > 0) min(widthPx / ui.videoWidth, constraints.maxHeight.toFloat() / ui.videoHeight) else 1f
         val effectiveZoom = zoom * if (aspect == AspectMode.ORIGINAL && fit > 0f) 1f / fit else 1f
@@ -223,8 +240,20 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             }
         }
 
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val sysGestures = WindowInsets.systemGestures
+        val bufferPx = with(density) { settings.edgeBufferDp.dp.toPx() }
+        val capPx = with(density) { 72.dp.toPx() }
+        val deadZone = DeadZone(
+            left = max(bufferPx, sysGestures.getLeft(density, layoutDirection).toFloat()).coerceAtMost(capPx),
+            top = max(bufferPx, sysGestures.getTop(density).toFloat()).coerceAtMost(capPx),
+            right = max(bufferPx, sysGestures.getRight(density, layoutDirection).toFloat()).coerceAtMost(capPx),
+            bottom = max(bufferPx, sysGestures.getBottom(density).toFloat()).coerceAtMost(capPx),
+        )
         val handler = rememberUpdatedState(
             GestureHandler(
+                deadZone = deadZone,
                 onTap = ::handleTap,
                 onSeekStart = { if (settings.gestureSeek) { scrubbing = true; scrubBase = player.currentPosition; scrubTarget = scrubBase; hud = HudKind.SEEK; hudStamp++ } },
                 onSeekDrag = { dx ->
@@ -290,8 +319,8 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             // 4 — HUDs
             if (skipSide != 0) SkipHud(skipSide, skipTotal, Modifier.align(if (skipSide < 0) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = 56.dp))
             when (hud) {
-                HudKind.BRIGHTNESS -> LevelHud(Icons.Rounded.BrightnessMedium, brightness, "${(brightness * 100).roundToInt()}%", Modifier.align(Alignment.CenterStart).padding(start = 32.dp))
-                HudKind.VOLUME -> LevelHud(if (volume <= 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, volume / 150f, "${volume.roundToInt()}%", Modifier.align(Alignment.CenterEnd).padding(end = 32.dp))
+                HudKind.BRIGHTNESS -> LevelHud(Icons.Rounded.BrightnessMedium, brightness, "${(brightness * 100).roundToInt()}%", Modifier.align(Alignment.Center))
+                HudKind.VOLUME -> LevelHud(if (volume <= 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, volume / 150f, "${volume.roundToInt()}%", Modifier.align(Alignment.Center))
                 HudKind.SEEK -> SeekHud(scrubTarget, scrubTarget - scrubBase, Modifier.align(Alignment.Center))
                 HudKind.ZOOM -> Pill("Zoom ${(zoom * 100).roundToInt()}%", Modifier.align(Alignment.Center))
                 HudKind.NONE -> {}
@@ -339,14 +368,28 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                                 color = Color.White, style = MaterialTheme.typography.labelMedium,
                             )
                         }
+                        val hasQueue = pb.queue.size > 1
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton({ poke(); vm.playback.previous() }, Modifier.size(48.dp)) { Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                            IconButton({ poke(); vm.playback.seekBy(-10_000) }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                            Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); vm.togglePlay() }, contentAlignment = Alignment.Center) {
+                                Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(38.dp))
+                            }
+                            IconButton({ poke(); vm.playback.seekBy(10_000) }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                            IconButton({ poke(); vm.playback.next() }, Modifier.size(48.dp), enabled = hasQueue) {
+                                Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White.copy(alpha = if (hasQueue) 1f else 0.35f), modifier = Modifier.size(32.dp))
+                            }
+                        }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             IconButton({ locked = true; controlsVisible = false; lockHint = true }) { Icon(Icons.Rounded.LockOpen, "Lock screen", tint = Color.White) }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                IconButton({ poke(); vm.playback.seekBy(-10_000) }, Modifier.size(52.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(34.dp)) }
-                                Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); vm.togglePlay() }, contentAlignment = Alignment.Center) {
-                                    Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(38.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ControlPill(Icons.Rounded.Headphones, "Background", settings.backgroundPlay) {
+                                    poke()
+                                    val on = !settings.backgroundPlay
+                                    vm.setBackgroundPlay(on)
+                                    Toast.makeText(ctx, if (on) "Background play on — sound keeps playing when you leave" else "Background play off", Toast.LENGTH_SHORT).show()
                                 }
-                                IconButton({ poke(); vm.playback.seekBy(10_000) }, Modifier.size(52.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(34.dp)) }
+                                ControlPill(Icons.Rounded.GraphicEq, "Audio mode", false) { vm.setAudioMode(true) }
                             }
                             IconButton({ poke(); host.toggleOrientation() }) { Icon(if (landscape) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, "Rotate", tint = Color.White) }
                         }
@@ -439,14 +482,30 @@ private fun SkipHud(side: Int, total: Int, modifier: Modifier) {
     }
 }
 
-/** Translucent vertical level indicator for brightness (0–100 %) and volume (0–150 %). */
+/** Centered level indicator for brightness (0–100 %) and volume (0–150 %): icon · bar · percentage. */
 @Composable
 private fun LevelHud(icon: ImageVector, fraction: Float, label: String, modifier: Modifier) {
-    Column(modifier.width(46.dp).clip(RoundedCornerShape(23.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color.White, fontSize = 11.sp)
-        Box(Modifier.padding(vertical = 10.dp).width(6.dp).height(130.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f))) {
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(fraction.coerceIn(0f, 1f)).background(LocalDhvon.current.accent))
+    Row(
+        modifier.clip(RoundedCornerShape(28.dp)).background(Color.Black.copy(alpha = 0.64f)).padding(horizontal = 22.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp))
+        Box(Modifier.width(170.dp).height(8.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f))) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(LocalDhvon.current.accent))
         }
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Text(label, color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.widthIn(min = 46.dp))
+    }
+}
+
+/** Small labelled toggle used in the controls (Background play / Audio mode). */
+@Composable
+private fun ControlPill(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    val p = LocalDhvon.current
+    Row(
+        Modifier.clip(CircleShape).background(if (active) p.accent else Color.White.copy(alpha = 0.16f)).clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
 }

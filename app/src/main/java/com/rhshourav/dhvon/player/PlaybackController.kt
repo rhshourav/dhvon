@@ -6,10 +6,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.rhshourav.dhvon.VideoPlayerActivity
 import com.rhshourav.dhvon.data.local.PlaybackStateEntity
+import com.rhshourav.dhvon.data.settings.Keys
 import com.rhshourav.dhvon.data.settings.SettingsRepository
 import com.rhshourav.dhvon.data.user.UserDataRepository
 import com.rhshourav.dhvon.di.ApplicationScope
@@ -18,6 +20,10 @@ import com.rhshourav.dhvon.domain.durationHint
 import com.rhshourav.dhvon.domain.isVideoItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,15 +64,90 @@ class PlaybackController @Inject constructor(
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
     val player: ExoPlayer get() = holder.player
 
+    private var queueSaveJob: Job? = null
+    private var restored = false
+
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             publish(player, rebuildQueue = events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION))
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED)) scheduleQueueSave()
+            else if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) saveSession(fullQueue = false)
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) saveSession(fullQueue = false) }
+
+        /** A queued/restored file that no longer exists shouldn't wedge the player: skip it, or clear the queue. */
+        override fun onPlayerError(error: PlaybackException) {
+            if (error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND || error.errorCode == PlaybackException.ERROR_CODE_IO_NO_PERMISSION) {
+                val p = holder.player
+                if (p.hasNextMediaItem()) { p.seekToNextMediaItem(); p.prepare() } else { p.stop(); p.clearMediaItems() }
+            }
         }
     }
 
     init {
         scope.launch { holder.playerFlow.collect { p -> p.addListener(listener); publish(p, true) } }
+        // Position checkpoint every 5 s while playing, so a killed process loses at most a few seconds.
+        scope.launch { while (true) { delay(5_000); if (holder.player.isPlaying) saveSession(fullQueue = false) } }
     }
+
+    // ------------------------------------------------------------------ session persistence (background-play robustness)
+
+    private fun scheduleQueueSave() {
+        queueSaveJob?.cancel()
+        queueSaveJob = scope.launch { delay(800); saveSession(fullQueue = true) }
+    }
+
+    private fun saveSession(fullQueue: Boolean) {
+        val p = holder.player
+        val index = p.currentMediaItemIndex.coerceAtLeast(0)
+        val pos = p.currentPosition.coerceAtLeast(0L)
+        val json = if (fullQueue) {
+            JSONArray().also { arr ->
+                for (i in 0 until p.mediaItemCount) {
+                    val m = p.getMediaItemAt(i)
+                    arr.put(JSONObject().put("u", m.mediaId).put("t", m.mediaMetadata.title?.toString().orEmpty())
+                        .put("a", m.mediaMetadata.artist?.toString().orEmpty()).put("v", m.isVideoItem).put("d", m.durationHint))
+                }
+            }.toString()
+        } else null
+        scope.launch {
+            if (json != null) settings.set(Keys.SESSION_QUEUE, json)
+            settings.set(Keys.SESSION_INDEX, index)
+            settings.set(Keys.SESSION_POS, pos)
+        }
+    }
+
+    /**
+     * Brings back the last queue (paused, at the saved position) after the process was killed.
+     * Called once media access is available; does nothing if something is already loaded or the user turned it off.
+     */
+    fun restoreLastSession() {
+        if (restored) return
+        restored = true
+        scope.launch {
+            val prefs = settings.settings.first()
+            if (!prefs.restoreSession || holder.player.mediaItemCount > 0) return@launch
+            val json = settings.get(Keys.SESSION_QUEUE).orEmpty()
+            if (json.length < 3) return@launch
+            val index = settings.get(Keys.SESSION_INDEX) ?: 0
+            val pos = settings.get(Keys.SESSION_POS) ?: 0L
+            val files = runCatching {
+                val arr = JSONArray(json)
+                (0 until arr.length()).map {
+                    val o = arr.getJSONObject(it)
+                    MediaFile(0, o.getString("u"), o.optString("t"), o.optString("t"), o.optLong("d"), 0, 0, "", o.optBoolean("v"), artist = o.optString("a"))
+                }
+            }.getOrNull().orEmpty()
+            if (files.isEmpty()) return@launch
+            holder.setDecoderMode(prefs.decoderMode)
+            val p = holder.player
+            p.setMediaItems(files.map { it.toMediaItem() }, index.coerceIn(files.indices), pos)
+            p.playWhenReady = false
+            p.prepare()
+        }
+    }
+
+    private fun ensureService() { runCatching { context.startService(Intent(context, DhvonPlaybackService::class.java)) } }
 
     private fun publish(p: Player, rebuildQueue: Boolean) {
         val item = p.currentMediaItem
@@ -153,7 +234,7 @@ class PlaybackController @Inject constructor(
         p.shuffleModeEnabled = shuffle
         p.prepare()
         p.playWhenReady = true
-        runCatching { context.startService(Intent(context, DhvonPlaybackService::class.java)) }
+        ensureService()
     }
 
     private fun persistCurrent() {
@@ -170,7 +251,7 @@ class PlaybackController @Inject constructor(
 
     fun togglePlayPause() {
         val p = holder.player
-        if (p.isPlaying) p.pause() else { if (p.playbackState == Player.STATE_ENDED) p.seekTo(0); p.play() }
+        if (p.isPlaying) p.pause() else { ensureService(); if (p.playbackState == Player.STATE_ENDED) p.seekTo(0); p.play() }
     }
     fun next() = holder.player.seekToNextMediaItem()
     fun previous() { val p = holder.player; if (p.currentPosition > 3_000) p.seekTo(0) else p.seekToPreviousMediaItem() }

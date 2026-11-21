@@ -61,6 +61,8 @@ data class AppSettings(
     val gestureDoubleTap: Boolean = true,
     val controlsHideSeconds: Int = 4,
     val showRemainingTime: Boolean = false,
+    val edgeBufferDp: Int = 32,                    // video gestures ignore touches this close to a screen edge
+    val restoreSession: Boolean = true,            // bring back the last queue after the process is killed
 )
 
 object Keys {
@@ -102,6 +104,11 @@ object Keys {
     val G_DOUBLE = booleanPreferencesKey("g_double")
     val HIDE_SECS = intPreferencesKey("controls_hide_secs")
     val REMAINING = booleanPreferencesKey("show_remaining")
+    val EDGE_DP = intPreferencesKey("edge_buffer_dp")
+    val RESTORE_SESSION = booleanPreferencesKey("restore_session")
+    val SESSION_QUEUE = stringPreferencesKey("session_queue")
+    val SESSION_INDEX = intPreferencesKey("session_index")
+    val SESSION_POS = longPreferencesKey("session_pos")
     fun lrcFor(uriHash: Int) = stringPreferencesKey("lrc_$uriHash")
 }
 
@@ -152,6 +159,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             gestureDoubleTap = p[Keys.G_DOUBLE] ?: d.gestureDoubleTap,
             controlsHideSeconds = p[Keys.HIDE_SECS] ?: d.controlsHideSeconds,
             showRemainingTime = p[Keys.REMAINING] ?: d.showRemainingTime,
+            edgeBufferDp = p[Keys.EDGE_DP] ?: d.edgeBufferDp,
+            restoreSession = p[Keys.RESTORE_SESSION] ?: d.restoreSession,
         )
     }
 
@@ -166,7 +175,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             it.remove(Keys.HIDDEN_HOME); it.remove(Keys.G_SEEK); it.remove(Keys.G_BRIGHT); it.remove(Keys.G_VOLUME)
             it.remove(Keys.G_ZOOM); it.remove(Keys.G_DOUBLE); it.remove(Keys.HIDE_SECS); it.remove(Keys.REMAINING)
             it.remove(Keys.SEEK_SENS); it.remove(Keys.BRIGHT_SENS); it.remove(Keys.VOL_SENS); it.remove(Keys.DOUBLE_TAP)
-            it.remove(Keys.SUB_SIZE); it.remove(Keys.SUB_COLOR); it.remove(Keys.SUB_BG)
+            it.remove(Keys.SUB_SIZE); it.remove(Keys.SUB_COLOR); it.remove(Keys.SUB_BG); it.remove(Keys.EDGE_DP)
         }
     }
 

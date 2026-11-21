@@ -99,7 +99,7 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
 
     override fun onStart() {
         super.onStart()
-        holder.setVideoEnabled(true)
+        holder.setVideoEnabled(!vm.audioMode.value)   // audio mode keeps the video renderer asleep
         applyImmersive()
     }
 
@@ -108,14 +108,14 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
         if (isChangingConfigurations) return
         when {
             isInPictureInPictureMode -> holder.player.pause()                 // the PiP window was dismissed
-            settings.backgroundPlay -> holder.setVideoEnabled(false)         // audio carries on, video renderer sleeps
+            vm.audioMode.value || settings.backgroundPlay -> holder.setVideoEnabled(false)   // audio carries on, video renderer sleeps
             else -> holder.player.pause()
         }
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (settings.autoPip && holder.player.isPlaying && !isInPictureInPictureMode) enterPip()
+        if (settings.autoPip && holder.player.isPlaying && !isInPictureInPictureMode && !vm.audioMode.value) enterPip()
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
@@ -157,6 +157,7 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
     }
 
     override fun enterPip() {
+        if (vm.audioMode.value) return
         val size = holder.player.videoSize
         val ratio = if (size.width > 0 && size.height > 0) (size.width.toFloat() / size.height).coerceIn(0.42f, 2.39f) else 16f / 9f
         runCatching {

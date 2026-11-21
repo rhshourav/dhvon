@@ -29,7 +29,7 @@ class RootViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     /** Called once the user has granted media access (or picked a SAF folder). */
-    fun onMediaAccess() { media.start(); effects.start() }
+    fun onMediaAccess() { media.start(); effects.start(); playback.restoreLastSession() }
 
     fun addSafTree(uri: Uri) { viewModelScope.launch { settingsRepo.addSafTree(uri.toString()) } }
 }

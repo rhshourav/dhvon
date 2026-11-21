@@ -41,7 +41,7 @@ fun MoreScreen(onNavigate: (String) -> Unit, onSwitchTab: (String) -> Unit, vm: 
         WaveGlow(Modifier.fillMaxWidth().height(260.dp).align(Alignment.BottomCenter))
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DhvonWordmark(Modifier.padding(top = 20.dp, bottom = 18.dp), logoHeight = 44.dp, fontSize = 24)
-            MoreItem(Icons.Rounded.VideoLibrary, "Library", null) { onSwitchTab(Routes.LIBRARY) }
+            MoreItem(Icons.Rounded.Folder, "Folders", null) { onSwitchTab(Routes.LIBRARY) }
             MoreItem(Icons.AutoMirrored.Rounded.PlaylistPlay, "Playlists", null) { onSwitchTab(Routes.PLAYLISTS) }
             MoreItem(Icons.Rounded.Equalizer, "Equalizer", null) { onNavigate(Routes.EQUALIZER) }
             MoreItem(Icons.Rounded.Timer, "Sleep Timer", if (timer.active) (if (timer.endOfTrack) "End of track" else "${timer.remainingMs / 60_000 + 1} min left") else null) { sleepSheet = true }

@@ -84,22 +84,15 @@ fun LibraryScreen(
     val p = LocalDhvon.current
     val ui by vm.state.collectAsStateWithLifecycle()
 
-    LazyColumn(Modifier.fillMaxSize().background(p.background), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().background(p.background)) {
+    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Library", color = p.textPrimary, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                Text("Folders", color = p.textPrimary, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onPickFolder) { SilverIcon(Icons.Rounded.CreateNewFolder, "Add folder", Modifier.size(26.dp)) }
                 IconButton(onClick = onSearch) { SilverIcon(Icons.Rounded.Search, "Search", Modifier.size(26.dp)) }
             }
         }
-        item {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                BrowseRow(Icons.Rounded.Movie, "Videos", "${ui.videoCount} items") { onOpenFolder(Routes.ALL_VIDEOS) }
-                BrowseRow(Icons.Rounded.MusicNote, "Music", "${ui.audioCount} items") { onOpenFolder(Routes.ALL_MUSIC) }
-                BrowseRow(Icons.Rounded.Favorite, "Favorites", "${ui.favoriteCount} items") { onOpenFolder(Routes.FAVORITES) }
-            }
-        }
-        item { StorageBar(ui.storage, Modifier.padding(horizontal = 20.dp)) }
         ui.lastFolder?.let { last ->
             item {
                 Row(
@@ -143,18 +136,6 @@ fun LibraryScreen(
             }
         }
     }
-}
-
-@Composable
-private fun BrowseRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    val p = LocalDhvon.current
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(p.card), contentAlignment = Alignment.Center) { SilverIcon(icon, null, Modifier.size(24.dp)) }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = p.textPrimary, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
-        }
-        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = p.textSecondary)
+    StorageBar(ui.storage, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp))
     }
 }

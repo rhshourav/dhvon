@@ -11,6 +11,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
@@ -25,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
@@ -174,6 +177,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     var locked by remember { mutableStateOf(false) }
     var lockHint by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var playlistOpen by remember { mutableStateOf(false) }
     var aspect by remember { mutableStateOf(AspectMode.FIT) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -197,13 +201,13 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     // ---- side effects
     LaunchedEffect(ui.mediaKey, ui.videoWidth, ui.videoHeight) { if (ui.videoWidth > 0 && ui.videoHeight > 0) host.lockOrientationFor(ui.videoWidth, ui.videoHeight) }
     LaunchedEffect(ui.notice) { ui.notice?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.consumeNotice() } }
-    LaunchedEffect(controlsVisible, ui.isPlaying, menuOpen, scrubbing, interaction) {
-        if (controlsVisible && ui.isPlaying && !menuOpen && !scrubbing) { delay(settings.controlsHideSeconds * 1000L); controlsVisible = false }
+    LaunchedEffect(controlsVisible, ui.isPlaying, menuOpen, playlistOpen, scrubbing, interaction) {
+        if (controlsVisible && ui.isPlaying && !menuOpen && !playlistOpen && !scrubbing) { delay(settings.controlsHideSeconds * 1000L); controlsVisible = false }
     }
     LaunchedEffect(hud, hudStamp, scrubbing) { if (hud != HudKind.NONE && !scrubbing) { delay(900); hud = HudKind.NONE } }
     LaunchedEffect(skipStamp) { if (skipSide != 0) { delay(800); skipSide = 0; skipTotal = 0 } }
     LaunchedEffect(lockHint) { if (lockHint) { delay(2500); lockHint = false } }
-    BackHandler(enabled = menuOpen || locked) { if (menuOpen) menuOpen = false else lockHint = true }
+    BackHandler(enabled = menuOpen || playlistOpen || locked) { if (playlistOpen) playlistOpen = false else if (menuOpen) menuOpen = false else lockHint = true }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         if (audioMode && !inPip) {
@@ -330,18 +334,31 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             // 5 — controls
             AnimatedVisibility(controlsVisible && !locked, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
                 Box(Modifier.fillMaxSize()) {
-                    Row(
-                        Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
-                            .displayCutoutPadding().padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton({ host.finishPlayer() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
-                        Text(ui.title, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                    val topActions: @Composable RowScope.() -> Unit = {
+                        IconButton({
+                            poke()
+                            val on = !settings.backgroundPlay
+                            vm.setBackgroundPlay(on)
+                            Toast.makeText(ctx, if (on) "Background play on — sound keeps playing when you leave" else "Background play off", Toast.LENGTH_SHORT).show()
+                        }) { Icon(Icons.Rounded.Headphones, "Background play", tint = if (settings.backgroundPlay) p.accentSecondary else Color.White) }
+                        IconButton({ vm.setAudioMode(true) }) { Icon(Icons.Rounded.GraphicEq, "Audio mode", tint = Color.White) }
                         IconButton({ poke(); host.enterPip() }) { Icon(Icons.Rounded.PictureInPictureAlt, "Pop-up window", tint = Color.White) }
+                        IconButton({ poke(); playlistOpen = true }) { Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, "Playlist", tint = Color.White) }
                         IconButton({ poke(); vm.toggleSubtitles() }) {
                             Icon(if (ui.subtitlesEnabled) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionDisabled, "Subtitles", tint = if (ui.subtitlesEnabled) p.accentSecondary else Color.White)
                         }
                         IconButton({ menuOpen = !menuOpen }) { Icon(Icons.Rounded.Settings, "Settings", tint = Color.White) }
+                    }
+                    Column(
+                        Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
+                            .displayCutoutPadding().padding(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton({ host.finishPlayer() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
+                            Text(ui.title, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                            if (landscape) topActions()
+                        }
+                        if (!landscape) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { topActions() }
                     }
                     Column(
                         Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
@@ -382,15 +399,6 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                         }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             IconButton({ locked = true; controlsVisible = false; lockHint = true }) { Icon(Icons.Rounded.LockOpen, "Lock screen", tint = Color.White) }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ControlPill(Icons.Rounded.Headphones, "Background", settings.backgroundPlay) {
-                                    poke()
-                                    val on = !settings.backgroundPlay
-                                    vm.setBackgroundPlay(on)
-                                    Toast.makeText(ctx, if (on) "Background play on — sound keeps playing when you leave" else "Background play off", Toast.LENGTH_SHORT).show()
-                                }
-                                ControlPill(Icons.Rounded.GraphicEq, "Audio mode", false) { vm.setAudioMode(true) }
-                            }
                             IconButton({ poke(); host.toggleOrientation() }) { Icon(if (landscape) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, "Rotate", tint = Color.White) }
                         }
                     }
@@ -405,6 +413,23 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     onLoadSubtitle = { subtitlePicker.launch(arrayOf("*/*")) },
                     onPip = { menuOpen = false; host.enterPip() },
                     modifier = Modifier.align(Alignment.TopEnd).displayCutoutPadding().padding(top = 60.dp, end = 12.dp),
+                )
+            }
+
+            // 6b — playlist panel: slides up from the bottom in the same glass style as the settings window
+            AnimatedVisibility(playlistOpen, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { playlistOpen = false })
+            }
+            AnimatedVisibility(
+                playlistOpen, Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
+            ) {
+                VideoPlaylistPanel(
+                    pb.queue, pb.currentIndex,
+                    onPick = { vm.playback.skipTo(it); playlistOpen = false },
+                    onRemove = { vm.playback.removeFromQueue(it) },
+                    onClose = { playlistOpen = false },
+                    modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxHeight * 0.62f),
                 )
             }
 
@@ -494,18 +519,5 @@ private fun LevelHud(icon: ImageVector, fraction: Float, label: String, modifier
             Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(LocalDhvon.current.accent))
         }
         Text(label, color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.widthIn(min = 46.dp))
-    }
-}
-
-/** Small labelled toggle used in the controls (Background play / Audio mode). */
-@Composable
-private fun ControlPill(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
-    val p = LocalDhvon.current
-    Row(
-        Modifier.clip(CircleShape).background(if (active) p.accent else Color.White.copy(alpha = 0.16f)).clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
-        Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
 }

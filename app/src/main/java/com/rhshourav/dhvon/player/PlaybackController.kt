@@ -6,11 +6,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.rhshourav.dhvon.VideoPlayerActivity
 import com.rhshourav.dhvon.data.local.PlaybackStateEntity
+import com.rhshourav.dhvon.data.media.MediaRepository
 import com.rhshourav.dhvon.data.settings.Keys
 import com.rhshourav.dhvon.data.settings.SettingsRepository
 import com.rhshourav.dhvon.data.user.UserDataRepository
@@ -57,6 +59,7 @@ class PlaybackController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val holder: PlayerHolder,
     private val userData: UserDataRepository,
+    private val media: MediaRepository,
     private val settings: SettingsRepository,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
@@ -65,6 +68,8 @@ class PlaybackController @Inject constructor(
     val player: ExoPlayer get() = holder.player
 
     private var queueSaveJob: Job? = null
+    /** The folder (or pseudo-folder) the current queue was started from — so auto-advance keeps its "last played" up to date. */
+    private var queueContext: String? = null
     private var restored = false
 
     private val listener = object : Player.Listener {
@@ -72,6 +77,7 @@ class PlaybackController @Inject constructor(
             publish(player, rebuildQueue = events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION))
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) scheduleQueueSave()
             else if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) saveSession(fullQueue = false)
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) recordLastPlayed(player.currentMediaItem)
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) saveSession(fullQueue = false) }
 
@@ -147,6 +153,19 @@ class PlaybackController @Inject constructor(
         }
     }
 
+    /** Remembers the playing file for its own folder and for the folder view it was started from. */
+    private fun recordLastPlayed(item: MediaItem?) {
+        val m = item ?: return
+        val uri = m.mediaId
+        val title = m.mediaMetadata.title?.toString().orEmpty()
+        val physical = media.library.value.find(uri)?.folderPath?.takeIf { it.isNotBlank() }
+        val ctx = queueContext
+        scope.launch {
+            if (physical != null) userData.setFolderLastPlayed(physical, uri, title)
+            if (ctx != null && ctx != physical) userData.setFolderLastPlayed(ctx, uri, title)
+        }
+    }
+
     private fun ensureService() { runCatching { context.startService(Intent(context, DhvonPlaybackService::class.java)) } }
 
     private fun publish(p: Player, rebuildQueue: Boolean) {
@@ -178,26 +197,26 @@ class PlaybackController @Inject constructor(
     // ------------------------------------------------------------------ starting playback
 
     /** Opens the video player; resumes from the last saved position when enabled in settings. */
-    fun playVideo(files: List<MediaFile>, index: Int) {
+    fun playVideo(files: List<MediaFile>, index: Int, folderContext: String? = null) {
         if (files.isEmpty()) return
         scope.launch {
             val resume = if (settings.settings.first().resumePlayback) resumePosition(files[index].uri) else null
-            setQueue(files, index, resume ?: C.TIME_UNSET, shuffle = false)
+            setQueue(files, index, resume ?: C.TIME_UNSET, shuffle = false, folderContext = folderContext)
             context.startActivity(Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 
     /** Plays [file] inside [list] (queue = every item of the same type, in list order). */
-    fun playFrom(file: MediaFile, list: List<MediaFile>) {
+    fun playFrom(file: MediaFile, list: List<MediaFile>, folderContext: String? = null) {
         val same = list.filter { it.isVideo == file.isVideo }.ifEmpty { listOf(file) }
         val idx = same.indexOfFirst { it.uri == file.uri }.coerceAtLeast(0)
-        if (file.isVideo) playVideo(same, idx) else playAudio(same, idx)
+        if (file.isVideo) playVideo(same, idx, folderContext) else playAudio(same, idx, false, folderContext)
     }
 
-    fun playAudio(files: List<MediaFile>, index: Int, shuffle: Boolean = false) {
+    fun playAudio(files: List<MediaFile>, index: Int, shuffle: Boolean = false, folderContext: String? = null) {
         if (files.isEmpty()) return
         val start = if (shuffle) Random.nextInt(files.size) else index.coerceIn(files.indices)
-        scope.launch { setQueue(files, start, C.TIME_UNSET, shuffle) }
+        scope.launch { setQueue(files, start, C.TIME_UNSET, shuffle, folderContext) }
     }
 
     /** Mixed audio/video queues (playlists). Opens the video screen only when the starting item is a video. */
@@ -224,7 +243,8 @@ class PlaybackController @Inject constructor(
     private suspend fun resumePosition(uri: String): Long? =
         userData.positionFor(uri)?.takeIf { it.positionMs > 5_000 && (it.durationMs <= 0 || it.positionMs < it.durationMs * 0.95) }?.positionMs
 
-    private suspend fun setQueue(files: List<MediaFile>, index: Int, startMs: Long, shuffle: Boolean) {
+    private suspend fun setQueue(files: List<MediaFile>, index: Int, startMs: Long, shuffle: Boolean, folderContext: String? = null) {
+        queueContext = folderContext
         persistCurrent()
         val prefs = settings.settings.first()
         holder.setDecoderMode(prefs.decoderMode)   // rebuilds the player only if the mode actually changed

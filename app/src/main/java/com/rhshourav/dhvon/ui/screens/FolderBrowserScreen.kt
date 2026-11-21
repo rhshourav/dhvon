@@ -18,6 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -85,6 +90,9 @@ class FolderViewModel @Inject constructor(
         Routes.ALL_VIDEOS -> "Videos"; Routes.ALL_MUSIC -> "Music"; Routes.FAVORITES -> "Favorites"
         else -> path.removePrefix("saf:").substringAfterLast('/').ifBlank { path }
     }
+
+    /** The file that was playing last in this folder — highlighted, scrolled to, and offered as "Continue". */
+    val lastPlayed: StateFlow<String?> = user.lastPlayedIn(path).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val query = MutableStateFlow("")
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
@@ -192,9 +200,13 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
     val ctx = LocalContext.current
     val ui by vm.state.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
+    val lastUri by vm.lastPlayed.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val s = ui.settings
     val selecting = selected.isNotEmpty()
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+    var scrolledToLast by rememberSaveable { mutableStateOf(false) }
 
     var searching by rememberSaveable { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
@@ -223,8 +235,17 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
         MediaActions(vm.playback::playNext, vm.playback::addToQueue, { playlistTarget = listOf(it) }, { vm.toggleFavorite(it) }, { it.uri in ui.favorites })
     }
     fun open(f: MediaFile) {
-        if (selecting) vm.toggleSelect(f.uri) else { vm.playback.playFrom(f, ui.items); if (!f.isVideo) onOpenNowPlaying() }
+        if (selecting) vm.toggleSelect(f.uri) else { vm.playback.playFrom(f, ui.items, vm.path); if (!f.isVideo) onOpenNowPlaying() }
     }
+
+    // Jump to the file that was playing last in this folder (once, when the list first shows).
+    LaunchedEffect(lastUri, ui.items.isNotEmpty()) {
+        if (!scrolledToLast && lastUri != null && ui.items.isNotEmpty()) {
+            val idx = ui.items.indexOfFirst { it.uri == lastUri }
+            if (idx >= 0) { if (s.viewMode == ViewMode.GRID) gridState.scrollToItem(idx) else listState.scrollToItem(idx); scrolledToLast = true }
+        }
+    }
+    val lastFile = if (query.isBlank()) ui.items.firstOrNull { it.uri == lastUri } else null
 
     Column(Modifier.fillMaxSize().background(p.background)) {
         // ---- top bar
@@ -272,17 +293,33 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
             }
         }
 
+        // ---- "Continue where you left off in this folder"
+        if (lastFile != null && !selecting && !searching) {
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(p.accent.copy(alpha = 0.16f))
+                    .clickable { open(lastFile) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null, tint = p.accent)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Continue where you left off", color = p.textSecondary, style = MaterialTheme.typography.labelMedium)
+                    Text(lastFile.title, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
         // ---- content
         when {
             ui.loaded && ui.items.isEmpty() -> EmptyState(Icons.Rounded.FolderOff, if (query.isNotBlank()) "No matches" else "Nothing here yet", if (query.isNotBlank()) "Try a different search." else "This folder has no playable media.")
             s.viewMode == ViewMode.GRID -> LazyVerticalGrid(
-                GridCells.Adaptive(150.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                GridCells.Adaptive(150.dp), state = gridState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(ui.items, key = { it.uri }) { f -> MediaGridCard(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }) }
+                items(ui.items, key = { it.uri }) { f -> MediaGridCard(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, lastPlayed = f.uri == lastUri) }
             }
-            else -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(ui.items, key = { it.uri }) { f -> MediaListRow(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, actions = actions) }
+            else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(ui.items, key = { it.uri }) { f -> MediaListRow(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, actions = actions, lastPlayed = f.uri == lastUri) }
             }
         }
     }

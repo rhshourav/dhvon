@@ -119,7 +119,7 @@ private fun MainScaffold(vm: RootViewModel, onPickFolder: () -> Unit) {
     val items = remember {
         listOf(
             NavItem(Routes.HOME, "Home", Icons.Rounded.Home),
-            NavItem(Routes.LIBRARY, "Library", Icons.Rounded.VideoLibrary),
+            NavItem(Routes.LIBRARY, "Folders", Icons.Rounded.Folder),
             NavItem(Routes.PLAYLISTS, "Playlists", Icons.AutoMirrored.Rounded.PlaylistPlay),
             NavItem(Routes.MORE, "More", Icons.Rounded.MoreHoriz),
         )

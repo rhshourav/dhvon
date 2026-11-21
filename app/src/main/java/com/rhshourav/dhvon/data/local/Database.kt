@@ -50,6 +50,10 @@ data class PlaylistItemEntity(
 @Entity(tableName = "folder_history")
 data class FolderHistoryEntity(@PrimaryKey val path: String, val openedAt: Long)
 
+/** Which file was playing last in a given folder (physical folder path, or a pseudo-folder like "@videos"). */
+@Entity(tableName = "folder_last_played")
+data class FolderLastPlayedEntity(@PrimaryKey val folderPath: String, val uri: String, val title: String, val updatedAt: Long)
+
 data class PlaylistSummary(val id: Long, val name: String, val itemCount: Int)
 
 @Dao
@@ -93,10 +97,16 @@ interface FolderHistoryDao {
     @Query("SELECT path FROM folder_history ORDER BY openedAt DESC LIMIT 1") fun last(): Flow<String?>
 }
 
+@Dao
+interface FolderLastPlayedDao {
+    @Upsert suspend fun upsert(e: FolderLastPlayedEntity)
+    @Query("SELECT uri FROM folder_last_played WHERE folderPath = :path") fun last(path: String): Flow<String?>
+}
+
 @Database(
     entities = [PlaybackStateEntity::class, FavoriteEntity::class, PlaylistEntity::class,
-        PlaylistItemEntity::class, FolderHistoryEntity::class],
-    version = 1,
+        PlaylistItemEntity::class, FolderHistoryEntity::class, FolderLastPlayedEntity::class],
+    version = 2,
     exportSchema = false,
 )
 abstract class DhvonDatabase : RoomDatabase() {
@@ -104,4 +114,5 @@ abstract class DhvonDatabase : RoomDatabase() {
     abstract fun favorites(): FavoriteDao
     abstract fun playlists(): PlaylistDao
     abstract fun folderHistory(): FolderHistoryDao
+    abstract fun folderLastPlayed(): FolderLastPlayedDao
 }

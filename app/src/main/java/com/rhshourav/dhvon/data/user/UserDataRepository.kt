@@ -16,6 +16,7 @@ class UserDataRepository @Inject constructor(
     private val favoritesDao: FavoriteDao,
     private val playlistDao: PlaylistDao,
     private val folderDao: FolderHistoryDao,
+    private val lastPlayedDao: FolderLastPlayedDao,
 ) {
     val recent: Flow<List<PlaybackStateEntity>> = playback.recent(30)
     val continueWatching: Flow<List<PlaybackStateEntity>> = playback.continueWatching(20)
@@ -30,6 +31,11 @@ class UserDataRepository @Inject constructor(
     suspend fun toggleFavorite(uri: String) {
         if (favoritesDao.exists(uri) > 0) favoritesDao.remove(uri) else favoritesDao.add(FavoriteEntity(uri, System.currentTimeMillis()))
     }
+
+    /** The file that was playing last in [path] (a folder path or pseudo-folder). */
+    fun lastPlayedIn(path: String): Flow<String?> = lastPlayedDao.last(path)
+    suspend fun setFolderLastPlayed(path: String, uri: String, title: String) =
+        lastPlayedDao.upsert(FolderLastPlayedEntity(path, uri, title, System.currentTimeMillis()))
 
     suspend fun markFolderOpened(path: String) = folderDao.upsert(FolderHistoryEntity(path, System.currentTimeMillis()))
 

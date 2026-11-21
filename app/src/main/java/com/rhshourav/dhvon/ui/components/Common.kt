@@ -210,12 +210,12 @@ private fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun MediaListRow(
     file: MediaFile, selected: Boolean, selectionMode: Boolean,
-    onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, actions: MediaActions? = null,
+    onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, actions: MediaActions? = null, lastPlayed: Boolean = false,
 ) {
     val p = LocalDhvon.current
     val pad = if (LocalCompact.current) 6.dp else 10.dp
     Row(
-        modifier.fillMaxWidth().background(if (selected) p.accent.copy(alpha = 0.16f) else Color.Transparent)
+        modifier.fillMaxWidth().background(if (selected) p.accent.copy(alpha = 0.16f) else if (lastPlayed) p.accent.copy(alpha = 0.08f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = pad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -225,27 +225,28 @@ fun MediaListRow(
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(file.title, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(file.title, color = if (lastPlayed) p.accent else p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = if (file.isVideo) listOfNotNull(file.resolutionLabel, formatSize(file.sizeBytes)).joinToString(" • ")
             else listOf(file.artist.ifBlank { "Unknown artist" }, formatDuration(file.durationMs)).joinToString(" • ")
-            Text(sub, color = p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (lastPlayed) "Last played · $sub" else sub, color = if (lastPlayed) p.accent else p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (actions != null && !selectionMode) MediaMenu(file, actions)
     }
 }
 
 @Composable
-fun MediaGridCard(file: MediaFile, selected: Boolean, selectionMode: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MediaGridCard(file: MediaFile, selected: Boolean, selectionMode: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, lastPlayed: Boolean = false) {
     val p = LocalDhvon.current
     Column(modifier.clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         Box {
             MediaThumb(file, Modifier.fillMaxWidth().aspectRatio(if (file.isVideo) 1.6f else 1f), RoundedCornerShape(14.dp), showDuration = file.isVideo)
             if (selected) Box(Modifier.matchParentSize().clip(RoundedCornerShape(14.dp)).background(p.accent.copy(alpha = 0.35f)))
+            if (lastPlayed) Box(Modifier.matchParentSize().border(2.dp, p.accent, RoundedCornerShape(14.dp)))
             if (selectionMode) SelectionMark(selected, Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(file.title, color = p.textPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(if (file.isVideo) formatSize(file.sizeBytes) else file.artist.ifBlank { formatDuration(file.durationMs) }, color = p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+        Text(file.title, color = if (lastPlayed) p.accent else p.textPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(if (lastPlayed) "Last played" else if (file.isVideo) formatSize(file.sizeBytes) else file.artist.ifBlank { formatDuration(file.durationMs) }, color = p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
     }
 }
 

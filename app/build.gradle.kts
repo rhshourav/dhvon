@@ -15,8 +15,8 @@ android {
         applicationId = "com.rhshourav.dhvon"
         minSdk = 26 // PiP + modern MediaStore; covers ~99% of active devices
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "3.0.1"
         buildConfigField("String", "AUTHOR", "\"rhshourav\"")
         buildConfigField("String", "REPO_URL", "\"https://github.com/rhshourav/DHVON\"")
     }
@@ -40,7 +40,8 @@ android {
     }
 
     packaging {
-        jniLibs { useLegacyPackaging = false }
+        // libvlc-all and the Jellyfin FFmpeg decoder can both bundle libc++_shared.so — keep the first one.
+        jniLibs { useLegacyPackaging = false; pickFirsts += "**/libc++_shared.so" }
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }
@@ -91,6 +92,10 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.ui.compose)
     implementation(libs.media3.ffmpeg.decoder)
+
+    // Software video fallback (DivX / Xvid / MS-MPEG4 .avi, MPEG-2 .ts) when MediaCodec has no decoder — LGPL-2.1+.
+    // If Gradle can't resolve 3.6.0, move to the newest 3.6.x on Maven Central.
+    implementation("org.videolan.android:libvlc-all:3.6.0")
 
     // Images / thumbnails
     implementation(libs.coil.compose)

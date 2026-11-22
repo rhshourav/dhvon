@@ -12,8 +12,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +37,10 @@ class SleepTimer @Inject constructor(
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
+
+    /** Emits once when a timed sleep finishes, so engines other than ExoPlayer (LibVLC fallback) can stop too. */
+    private val _fired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val fired: SharedFlow<Unit> = _fired.asSharedFlow()
     private var job: Job? = null
     private var eotListener: Player.Listener? = null
     private var eotPlayer: ExoPlayer? = null
@@ -49,6 +56,7 @@ class SleepTimer @Inject constructor(
                 delay(1_000)
             }
             fadeOutAndPause()
+            _fired.tryEmit(Unit)
             _state.value = State()
             if (closeApp) shutDownApp()
         }
@@ -70,6 +78,19 @@ class SleepTimer @Inject constructor(
         p.addListener(l)
         eotListener = l; eotPlayer = p
         _state.value = State(active = true, endOfTrack = true, closeApp = closeApp)
+    }
+
+    /**
+     * Lets an engine other than ExoPlayer (the LibVLC fallback) report that its file ended.
+     * @return true when an "end of track" timer was waiting for it — the caller then stays paused.
+     */
+    fun onExternalTrackEnded(): Boolean {
+        val s = _state.value
+        if (!s.active || !s.endOfTrack) return false
+        cancel()
+        _fired.tryEmit(Unit)
+        if (s.closeApp) shutDownApp()
+        return true
     }
 
     fun cancel() {

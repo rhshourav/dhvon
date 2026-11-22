@@ -111,6 +111,14 @@ object Keys {
     val SESSION_QUEUE = stringPreferencesKey("session_queue")
     val SESSION_INDEX = intPreferencesKey("session_index")
     val SESSION_POS = longPreferencesKey("session_pos")
+    // ---- DSP engine (global settings — deliberately NOT per-headphone profiles)
+    val DSP_ENABLED = booleanPreferencesKey("dsp_enabled")
+    val DSP_SIGNATURE = stringPreferencesKey("dsp_signature")
+    val DSP_ADAPTIVE = booleanPreferencesKey("dsp_adaptive")
+    val DSP_CUSTOM_ON = booleanPreferencesKey("dsp_custom_on")
+    val DSP_CUSTOM_BANDS = stringPreferencesKey("dsp_custom_bands")
+    val DSP_SPATIAL_ON = booleanPreferencesKey("dsp_spatial_on")
+    val DSP_SPATIAL_STRENGTH = intPreferencesKey("dsp_spatial_strength")
     fun lrcFor(uriHash: Int) = stringPreferencesKey("lrc_$uriHash")
 }
 

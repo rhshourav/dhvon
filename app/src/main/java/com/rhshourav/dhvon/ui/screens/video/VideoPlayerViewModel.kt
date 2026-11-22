@@ -5,6 +5,7 @@ package com.rhshourav.dhvon.ui.screens.video
 import android.content.Context
 import android.media.AudioManager
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,9 +22,12 @@ import androidx.media3.common.text.CueGroup
 import com.rhshourav.dhvon.data.media.SubtitleParser
 import com.rhshourav.dhvon.data.media.WaveformExtractor
 import com.rhshourav.dhvon.data.media.SubtitleTrackEngine
+import com.rhshourav.dhvon.data.media.SupportedMediaFormats
 import com.rhshourav.dhvon.data.settings.*
 import com.rhshourav.dhvon.player.AudioEffectsController
 import com.rhshourav.dhvon.player.PlaybackController
+import com.rhshourav.dhvon.domain.durationHint
+import com.rhshourav.dhvon.domain.isVideoItem
 import com.rhshourav.dhvon.player.PlayerHolder
 import com.rhshourav.dhvon.player.SleepTimer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -79,7 +83,7 @@ class VideoPlayerViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
     val effects: AudioEffectsController,
     private val waveform: WaveformExtractor,
-    val sleepTimer: SleepTimer,
+    val sleepTimer: SleepTimer,   // public: the quick-settings sleep page reads its state
 ) : ViewModel(), Player.Listener {
 
     val playerFlow = holder.playerFlow
@@ -97,6 +101,14 @@ class VideoPlayerViewModel @Inject constructor(
     fun setAudioMode(on: Boolean) {
         _audioMode.value = on
         holder.setVideoEnabled(!on)
+        if (on && _fallback.value.active) {
+            // Audio-only never needs the software video engine: hand the soundtrack back to ExoPlayer at the same spot.
+            val pos = _vlcPosition.value
+            _fallback.value = VlcFallbackState()
+            attached?.let { it.seekTo(pos); it.play() }
+        } else if (!on) {
+            attached?.let { evaluateFallback(it.currentTracks) }   // back to video: re-check whether it needs VLC
+        }
     }
 
     /** Real waveform peaks of the playing file's audio track — only computed while audio mode is on. */
@@ -113,12 +125,135 @@ class VideoPlayerViewModel @Inject constructor(
     private var embeddedCues: List<Cue> = emptyList()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    // ------------------------------------------------------------------ LibVLC software fallback
+
+    /** [active] while LibVLC (not ExoPlayer) plays the current file because MediaCodec has no decoder for its video. */
+    data class VlcFallbackState(val active: Boolean = false, val uri: String = "", val startMs: Long = 0L, val reason: String = "")
+
+    private val _fallback = MutableStateFlow(VlcFallbackState())
+    val fallback: StateFlow<VlcFallbackState> = _fallback.asStateFlow()
+    private val _vlcPlaying = MutableStateFlow(true)
+    val vlcPlaying: StateFlow<Boolean> = _vlcPlaying.asStateFlow()
+    private val _vlcPosition = MutableStateFlow(0L)
+    val vlcPosition: StateFlow<Long> = _vlcPosition.asStateFlow()
+    private val _vlcDuration = MutableStateFlow(0L)
+    val vlcDuration: StateFlow<Long> = _vlcDuration.asStateFlow()
+    private var lastVlcSave = 0L
+
+    /** Selectable *or* merely too big for the hardware counts as decodable; only "no decoder at all" triggers VLC. */
+    private fun Tracks.Group.isDecodable(): Boolean = (0 until length).any {
+        val support = getTrackSupport(it)
+        support == C.FORMAT_HANDLED || support == C.FORMAT_EXCEEDS_CAPABILITIES
+    }
+
+    private fun evaluateFallback(tracks: Tracks) {
+        val p = attached ?: return
+        if (_fallback.value.active || _audioMode.value || tracks.groups.isEmpty()) return
+        val item = p.currentMediaItem ?: return
+        if (!item.isVideoItem) return
+        val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+        if (videoGroups.isNotEmpty() && videoGroups.none { it.isDecodable() }) {
+            enterVlcFallback("No decoder for this video format")
+            return
+        }
+        // Audio but no video at all: only suspicious for containers ExoPlayer is known to struggle with (not every audio-only .mp4).
+        if (videoGroups.isEmpty() && tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
+            val id = item.mediaId
+            viewModelScope.launch {
+                val ext = withContext(Dispatchers.IO) { SupportedMediaFormats.extensionOf(displayNameOf(id)) }
+                if (ext in SupportedMediaFormats.FALLBACK_PRONE_VIDEO_EXTENSIONS && !_fallback.value.active && !_audioMode.value &&
+                    attached?.currentMediaItem?.mediaId == id
+                ) enterVlcFallback("No video track found in this container")
+            }
+        }
+    }
+
+    private fun displayNameOf(uriString: String): String? {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme == "file") return uri.lastPathSegment
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull() ?: uri.lastPathSegment
+    }
+
+    /** Parks ExoPlayer (paused, same position) and lets the screen mount the LibVLC surface for this file. */
+    fun enterVlcFallback(reason: String) {
+        val p = attached ?: return
+        val item = p.currentMediaItem ?: return
+        if (_fallback.value.active) return
+        val start = p.currentPosition.coerceAtLeast(0L)
+        p.pause()
+        _vlcPosition.value = start
+        _vlcDuration.value = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: item.durationHint
+        _vlcPlaying.value = true
+        lastVlcSave = SystemClock.elapsedRealtime()
+        _fallback.value = VlcFallbackState(true, item.mediaId, start, reason)
+        _ui.update { it.copy(error = null, notice = "Switched to the VLC engine for this file") }
+    }
+
+    /** A headset button or notification "play" reaches the parked ExoPlayer — treat it as play/pause for VLC instead. */
+    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (_fallback.value.active && playWhenReady) {
+            attached?.pause()
+            _vlcPlaying.update { !it }
+        }
+    }
+
+    fun setVlcPlaying(on: Boolean) { _vlcPlaying.value = on }
+    fun toggleVlcPlaying() { _vlcPlaying.update { !it } }
+    fun setVlcPosition(ms: Long) { _vlcPosition.value = ms }
+    fun onVlcLength(ms: Long) { if (ms > 0) _vlcDuration.value = ms }
+
+    fun onVlcTime(ms: Long) {
+        _vlcPosition.value = ms
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastVlcSave > 5_000) { lastVlcSave = now; saveVlcPosition() }   // resume point, like the 5 s recorder for ExoPlayer
+    }
+
+    /** @return true when the screen should restart the same file (repeat-one). */
+    fun onVlcEnded(): Boolean {
+        saveVlcPosition(finished = true)
+        if (sleepTimer.onExternalTrackEnded()) { _vlcPlaying.value = false; return false }   // "End of this video" sleep timer
+        val p = attached ?: return false
+        return when {
+            p.repeatMode == Player.REPEAT_MODE_ONE -> true
+            p.hasNextMediaItem() -> { p.seekToNextMediaItem(); false }        // → onMediaItemTransition starts it
+            p.repeatMode == Player.REPEAT_MODE_ALL && p.mediaItemCount > 1 -> { p.seekTo(0, C.TIME_UNSET); false }
+            else -> { _vlcPlaying.value = false; false }
+        }
+    }
+
+    fun onVlcError(message: String) {
+        _fallback.value = VlcFallbackState()
+        _ui.update { it.copy(error = message) }
+    }
+
+    private fun saveVlcPosition(finished: Boolean = false) =
+        playback.recordExternalPosition(_vlcPosition.value, _vlcDuration.value, finished)
+
+    // ------------------------------------------------------------------ scrubbing (keyframe-snapped drag, exact release)
+
+    fun beginScrub() = holder.beginScrub()
+    fun finishScrub(targetMs: Long) = holder.finishScrub(targetMs)
+
+    /** Double-tap / button skip: snap to the nearest keyframe for speed, then restore the configured precision. */
+    fun skipBy(deltaMs: Long) {
+        holder.beginScrub()
+        playback.seekBy(deltaMs)
+        holder.endScrub()
+    }
+
     init {
+        effects.start()          // idempotent — makes sure the DSP and the Bluetooth watcher run even on a cold "Open with"
+        viewModelScope.launch { sleepTimer.fired.collect { if (_fallback.value.active) _vlcPlaying.value = false } }
         viewModelScope.launch { holder.playerFlow.collect { attach(it) } }
         viewModelScope.launch { while (true) { tick(); delay(80) } }
     }
 
-    override fun onCleared() { attached?.removeListener(this) }
+    override fun onCleared() {
+        attached?.removeListener(this)
+        if (_fallback.value.active) saveVlcPosition()
+    }
 
     private fun attach(p: Player) {
         attached?.removeListener(this)
@@ -131,13 +266,19 @@ class VideoPlayerViewModel @Inject constructor(
     // ------------------------------------------------------------------ player events
 
     override fun onEvents(player: Player, events: Player.Events) = publish(player)
-    override fun onTracksChanged(tracks: Tracks) = refreshTracks(tracks)
+    override fun onTracksChanged(tracks: Tracks) { refreshTracks(tracks); evaluateFallback(tracks) }
     override fun onVideoSizeChanged(videoSize: VideoSize) { attached?.let { publish(it) } }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         externals.clear(); pending.clear(); embeddedCues = emptyList(); _cues.value = emptyList()
         holder.audioProcessor.delayMs = 0
         _ui.update { it.copy(selectedExternal = null, externalSubs = emptyList(), subtitleOffsetMs = 0, audioDelayMs = 0, error = null) }
+        if (_fallback.value.active) {
+            // Next / previous / auto-advance while VLC was playing: ExoPlayer was parked paused, so start the new item.
+            _fallback.value = VlcFallbackState()
+            _vlcPosition.value = 0L; _vlcDuration.value = 0L; _vlcPlaying.value = true
+            if (mediaItem != null) attached?.let { if (it.playbackState == Player.STATE_IDLE) it.prepare(); it.play() }
+        }
     }
 
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -156,7 +297,13 @@ class VideoPlayerViewModel @Inject constructor(
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES, PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
         )
-        if (decoderProblem && holder.decoderMode != DecoderMode.SW) {
+        val containerProblem = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+            error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+        val canFallback = attached?.currentMediaItem?.isVideoItem == true && !_audioMode.value && !_fallback.value.active
+        if (canFallback && (containerProblem || (decoderProblem && holder.decoderMode == DecoderMode.SW))) {
+            // Last resort: Software decoders already failed (or the container is unreadable) → LibVLC.
+            enterVlcFallback(if (containerProblem) "ExoPlayer can't read this container" else "No decoder could play this video")
+        } else if (decoderProblem && holder.decoderMode != DecoderMode.SW) {
             // Automatic fallback: rebuild with software decoders (+ FFmpeg audio) and keep playing from the same spot.
             holder.setDecoderMode(DecoderMode.SW)
             _ui.update { it.copy(decoder = DecoderMode.SW, notice = "That decoder couldn't play this file — switched to Software", error = null) }
@@ -269,7 +416,7 @@ class VideoPlayerViewModel @Inject constructor(
         val p = attached ?: return
         val s = _ui.value
         if (!s.subtitlesEnabled) { if (_cues.value.isNotEmpty()) _cues.value = emptyList(); return }
-        val pos = p.currentPosition
+        val pos = if (_fallback.value.active) _vlcPosition.value else p.currentPosition
         val next: List<Cue> = s.selectedExternal?.let { externals[it] }
             ?.activeAt(pos - s.subtitleOffsetMs)?.map { c -> Cue.Builder().setText(c.text).build() }
             ?: run {

@@ -260,9 +260,9 @@ class PlaybackController @Inject constructor(
         }
     }
 
-    /** ACTION_VIEW / "Open with DHVON". */
-    fun playExternal(uri: String, title: String) {
-        val f = MediaFile(0, uri, title, title, 0, 0, 0, "", isVideo = true)
+    /** ACTION_VIEW / "Open with DHVON". Audio files opened this way are queued as audio (the video screen shows its audio mode). */
+    fun playExternal(uri: String, title: String, isVideo: Boolean = true) {
+        val f = MediaFile(0, uri, title, title, 0, 0, 0, "", isVideo = isVideo)
         scope.launch {
             val resume = if (settings.settings.first().resumePlayback) resumePosition(uri) else null
             setQueue(listOf(f), 0, resume ?: C.TIME_UNSET, false)
@@ -293,6 +293,20 @@ class PlaybackController @Inject constructor(
         val pos = p.currentPosition
         scope.launch {
             userData.savePosition(PlaybackStateEntity(item.mediaId, item.mediaMetadata.title?.toString().orEmpty(), item.isVideoItem, pos, dur, System.currentTimeMillis()))
+        }
+    }
+
+    /** Resume position reported by an engine other than ExoPlayer (the LibVLC software fallback). */
+    fun recordExternalPosition(positionMs: Long, durationMs: Long, finished: Boolean = false) {
+        val item = holder.player.currentMediaItem ?: return
+        val dur = durationMs.takeIf { it > 0 } ?: item.durationHint
+        scope.launch {
+            userData.savePosition(
+                PlaybackStateEntity(
+                    item.mediaId, item.mediaMetadata.title?.toString().orEmpty(), item.isVideoItem,
+                    if (finished) 0L else positionMs.coerceAtLeast(0L), dur, System.currentTimeMillis(),
+                )
+            )
         }
     }
 

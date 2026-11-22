@@ -10,6 +10,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -202,11 +204,11 @@ fun NowPlayingScreen(onBack: () -> Unit, vm: MusicPlayerViewModel = hiltViewMode
     }
 
     sheet?.let { which ->
-        ModalBottomSheet({ sheet = null }, containerColor = p.card, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = which != Sheet.EQ)) {
+        ModalBottomSheet({ sheet = null }, containerColor = p.card, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             when (which) {
                 Sheet.QUEUE -> QueueSheet(vm)
                 Sheet.LYRICS -> LyricsSheet(vm, position)
-                Sheet.EQ -> EqualizerPanel(vm.effects, Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp))
+                Sheet.EQ -> EqualizerPanel(vm.effects, Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp))
             }
         }
     }

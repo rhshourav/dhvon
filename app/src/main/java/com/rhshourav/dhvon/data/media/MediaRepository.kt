@@ -83,6 +83,7 @@ class MediaRepository @Inject constructor(
         val lib = withContext(Dispatchers.IO) {
             val v = runCatching { queryVideos() }.getOrDefault(emptyList()).toMutableList()
             val a = runCatching { queryAudio() }.getOrDefault(emptyList()).toMutableList()
+            runCatching { queryExtraFiles(v, a) }
             trees.forEach { runCatching { scanTree(it.toUri(), v, a) } }
             Library(v.sortedByDescending { it.dateModifiedSec }, a.sortedByDescending { it.dateModifiedSec }, true)
         }
@@ -112,6 +113,9 @@ class MediaRepository @Inject constructor(
                 val id = cur.getLong(iId)
                 val name = cur.getString(iName) ?: "Video $id"
                 val data = cur.getString(iData).orEmpty()
+                val ext = SupportedMediaFormats.extensionOf(name)
+                if (SupportedMediaFormats.isExcluded(ext)) continue
+                if (looksLikeSourceFile(ext, cur.getLong(iSize), cur.getLong(iDur))) continue
                 out += MediaFile(
                     id = id, uri = ContentUris.withAppendedId(VideoMedia.getContentUri("external"), id).toString(),
                     title = name.substringBeforeLast('.'), displayName = name,
@@ -139,6 +143,7 @@ class MediaRepository @Inject constructor(
             while (cur.moveToNext()) {
                 val id = cur.getLong(iId)
                 val name = cur.getString(iName) ?: "Track $id"
+                if (SupportedMediaFormats.isExcluded(SupportedMediaFormats.extensionOf(name))) continue
                 val artist = cur.getString(iArtist).orEmpty().let { if (it == "<unknown>") "" else it }
                 val album = cur.getString(iAlbum).orEmpty().let { if (it == "<unknown>") "" else it }
                 out += MediaFile(
@@ -152,6 +157,66 @@ class MediaRepository @Inject constructor(
             }
         }
         return out
+    }
+
+    // ---------------------------------------------------------------- generic Files collection
+
+    /** ".ts" doubles as TypeScript. A tiny, duration-less one is source code, not an MPEG transport stream. */
+    private fun looksLikeSourceFile(ext: String, sizeBytes: Long, durationMs: Long): Boolean =
+        ext == "ts" && durationMs <= 0L && sizeBytes < 512L * 1024
+
+    private val probeCache = HashMap<String, Probe>()
+    private fun probeCached(uri: Uri, size: Long, date: Long): Probe = probeCache.getOrPut("$uri|$size|$date") { probe(uri) }
+
+    /**
+     * Formats MediaStore may keep out of the Video / Audio collections (.ac3 .dts .wv .tta .aiff .caf .ra .rm .mxf .vob
+     * .flv .wmv .m2ts …) live in the generic Files collection. We ask only for known media extensions of rows MediaStore did
+     * not already classify, which keeps the query cheap.
+     * Limit: on Android 11+ scoped storage hides *non-media* Files rows from apps without all-files access (which DHVON
+     * deliberately never requests), so anything the system leaves unclassified must be added with "Add folder" — the SAF
+     * scanner below understands the same extensions.
+     */
+    @Suppress("DEPRECATION")
+    private fun queryExtraFiles(videos: MutableList<MediaFile>, audios: MutableList<MediaFile>) {
+        val known = HashSet<Long>().apply { videos.forEach { add(it.id) }; audios.forEach { add(it.id) } }
+        val exts = SupportedMediaFormats.QUERYABLE_EXTENSIONS
+        val nameCol = MediaStore.MediaColumns.DISPLAY_NAME
+        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE} AND " +
+            "${MediaStore.MediaColumns.SIZE} > 0 AND (" + exts.joinToString(" OR ") { "$nameCol LIKE ?" } + ")"
+        val args = Array(exts.size) { "%." + exts[it] }
+        val filesUri = MediaStore.Files.getContentUri("external")
+        val withDuration = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val projection = buildList {
+            add(MediaStore.MediaColumns._ID); add(nameCol); add(MediaStore.MediaColumns.SIZE)
+            add(MediaStore.MediaColumns.DATE_MODIFIED); add(MediaStore.MediaColumns.DATA); add(MediaStore.MediaColumns.MIME_TYPE)
+            if (withDuration) add(MediaStore.MediaColumns.DURATION)
+        }.toTypedArray()
+        resolver.query(filesUri, projection, selection, args, "${MediaStore.MediaColumns.DATE_MODIFIED} DESC")?.use { cur ->
+            val iId = cur.getColumnIndexOrThrow(MediaStore.MediaColumns._ID); val iName = cur.getColumnIndexOrThrow(nameCol)
+            val iSize = cur.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE); val iDate = cur.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            val iData = cur.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA); val iMime = cur.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+            val iDur = if (withDuration) cur.getColumnIndex(MediaStore.MediaColumns.DURATION) else -1
+            while (cur.moveToNext()) {
+                val id = cur.getLong(iId)
+                if (id in known) continue
+                val name = cur.getString(iName) ?: continue
+                val mime = cur.getString(iMime).orEmpty()
+                val kind = SupportedMediaFormats.classify(name, mime) ?: continue
+                val size = cur.getLong(iSize)
+                val date = cur.getLong(iDate)
+                val uri = ContentUris.withAppendedId(filesUri, id)
+                val rowDuration = if (iDur >= 0 && !cur.isNull(iDur)) cur.getLong(iDur) else 0L
+                val meta = if (rowDuration > 0) Probe(rowDuration, 0, 0) else probeCached(uri, size, date)
+                if (looksLikeSourceFile(SupportedMediaFormats.extensionOf(name), size, meta.durationMs)) continue
+                val file = MediaFile(
+                    id = id, uri = uri.toString(), title = name.substringBeforeLast('.'), displayName = name,
+                    durationMs = meta.durationMs, sizeBytes = size, dateModifiedSec = date,
+                    folderPath = cur.getString(iData).orEmpty().substringBeforeLast('/', "Unknown"),
+                    isVideo = kind == MediaKind.VIDEO, width = meta.width, height = meta.height, mimeType = mime,
+                )
+                if (kind == MediaKind.VIDEO) videos += file else audios += file
+            }
+        }
     }
 
     // ---------------------------------------------------------------- SAF fallback
@@ -174,10 +239,11 @@ class MediaRepository @Inject constructor(
                     val id = cur.getString(0); val name = cur.getString(1) ?: continue; val mime = cur.getString(2).orEmpty()
                     when {
                         mime == DocumentsContract.Document.MIME_TYPE_DIR -> dirs += id to name
-                        mime.startsWith("video/") || mime.startsWith("audio/") -> {
+                        SupportedMediaFormats.classify(name, mime) != null -> {
                             val docUri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                            val isVideo = mime.startsWith("video/")
+                            val isVideo = SupportedMediaFormats.classify(name, mime) == MediaKind.VIDEO
                             val meta = probe(docUri)
+                            if (looksLikeSourceFile(SupportedMediaFormats.extensionOf(name), cur.getLong(3), meta.durationMs)) continue
                             val f = MediaFile(
                                 id = docUri.toString().hashCode().toLong(), uri = docUri.toString(),
                                 title = name.substringBeforeLast('.'), displayName = name, durationMs = meta.durationMs,

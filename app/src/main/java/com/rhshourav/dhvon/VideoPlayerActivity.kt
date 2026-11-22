@@ -24,6 +24,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.rhshourav.dhvon.data.media.MediaKind
+import com.rhshourav.dhvon.data.media.SupportedMediaFormats
 import com.rhshourav.dhvon.data.settings.AppSettings
 import com.rhshourav.dhvon.data.settings.SettingsRepository
 import com.rhshourav.dhvon.data.settings.ThemeMode
@@ -92,7 +94,10 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
         val name = runCatching {
             contentResolver.query(data, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         }.getOrNull() ?: data.lastPathSegment ?: "Video"
-        playback.playExternal(data.toString(), name.substringBeforeLast('.'))
+        // Audio opened from a file manager gets the audio-mode screen; a video resets it (the activity is single-task).
+        val isAudio = SupportedMediaFormats.classify(name, runCatching { contentResolver.getType(data) }.getOrNull()) == MediaKind.AUDIO
+        vm.setAudioMode(isAudio)
+        playback.playExternal(data.toString(), name.substringBeforeLast('.'), isVideo = !isAudio)
     }
 
     // ---------------------------------------------------------------- lifecycle: PiP + background audio

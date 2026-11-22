@@ -2,7 +2,12 @@
 // Created by rhshourav · https://github.com/rhshourav/DHVON · GPL-3.0-or-later
 package com.rhshourav.dhvon.ui.screens.video
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -10,7 +15,10 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
@@ -55,6 +63,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -70,6 +81,7 @@ import com.rhshourav.dhvon.ui.theme.LocalDhvon
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.videolan.libvlc.MediaPlayer
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -169,7 +181,16 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     val pb by vm.playback.state.collectAsStateWithLifecycle()
     val audioMode by vm.audioMode.collectAsStateWithLifecycle()
     val peaks by vm.peaks.collectAsStateWithLifecycle()
-    val position by rememberPositionMs(player)
+    val exoPosition by rememberPositionMs(player)
+    // LibVLC software fallback: when active, position / duration / play state come from VLC and every control drives it.
+    val fb by vm.fallback.collectAsStateWithLifecycle()
+    val vlcPlaying by vm.vlcPlaying.collectAsStateWithLifecycle()
+    val vlcPos by vm.vlcPosition.collectAsStateWithLifecycle()
+    val vlcDur by vm.vlcDuration.collectAsStateWithLifecycle()
+    val vlc = remember { LibVlcHandle() }
+    val position = if (fb.active) vlcPos else exoPosition
+    val playing = if (fb.active) vlcPlaying else ui.isPlaying
+    val durationMs = if (fb.active && vlcDur > 0) vlcDur else ui.durationMs
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var controlsVisible by remember { mutableStateOf(true) }
@@ -205,17 +226,41 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     // Audio mode is a portrait experience: rotate up when entering it; leaving restores the video's own orientation (effect above).
     LaunchedEffect(audioMode) { if (audioMode) host.lockOrientationFor(1, 2) }
     LaunchedEffect(ui.notice) { ui.notice?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.consumeNotice() } }
-    LaunchedEffect(controlsVisible, ui.isPlaying, menuOpen, playlistOpen, scrubbing, interaction) {
-        if (controlsVisible && ui.isPlaying && !menuOpen && !playlistOpen && !scrubbing) { delay(settings.controlsHideSeconds * 1000L); controlsVisible = false }
+    LaunchedEffect(controlsVisible, playing, menuOpen, playlistOpen, scrubbing, interaction) {
+        if (controlsVisible && playing && !menuOpen && !playlistOpen && !scrubbing) { delay(settings.controlsHideSeconds * 1000L); controlsVisible = false }
     }
     LaunchedEffect(hud, hudStamp, scrubbing) { if (hud != HudKind.NONE && !scrubbing) { delay(900); hud = HudKind.NONE } }
     LaunchedEffect(skipStamp) { if (skipSide != 0) { delay(800); skipSide = 0; skipTotal = 0 } }
     LaunchedEffect(lockHint) { if (lockHint) { delay(2500); lockHint = false } }
     BackHandler(enabled = menuOpen || playlistOpen || locked) { if (playlistOpen) playlistOpen = false else if (menuOpen) menuOpen = false else lockHint = true }
 
+    // ---- LibVLC housekeeping: ExoPlayer pauses on "becoming noisy" and when the app stops; VLC has to be told.
+    if (fb.active) {
+        DisposableEffect(Unit) {
+            val receiver = object : BroadcastReceiver() { override fun onReceive(c: Context?, i: Intent?) { vm.setVlcPlaying(false) } }
+            ContextCompat.registerReceiver(ctx, receiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), ContextCompat.RECEIVER_NOT_EXPORTED)
+            onDispose { runCatching { ctx.unregisterReceiver(receiver) } }
+        }
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, settings.backgroundPlay) {
+            val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP && !settings.backgroundPlay) vm.setVlcPlaying(false) }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+    }
+
+    // The Bluetooth pill sits below the top bar while the controls are showing, and tucks up to the edge when they hide.
+    val btTopTarget = when {
+        audioMode -> 60.dp
+        controlsVisible && !locked -> if (landscape) 64.dp else 108.dp
+        else -> 10.dp
+    }
+    val btTop by animateDpAsState(btTopTarget, label = "bt_top")
+
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         if (audioMode && !inPip) {
             AudioModeUi(vm, player, ui, pb, settings, peaks, onShowVideo = { vm.setAudioMode(false) }, onClose = { host.finishPlayer() })
+            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().displayCutoutPadding().padding(top = btTop))
             return@BoxWithConstraints
         }
         val widthPx = constraints.maxWidth.toFloat()
@@ -223,10 +268,20 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
         val effectiveZoom = zoom * if (aspect == AspectMode.ORIGINAL && fit > 0f) 1f / fit else 1f
 
         fun poke() { interaction++ }
+
+        // Transport helpers: while the LibVLC fallback plays, the same buttons, seek bar and gestures drive VLC instead of ExoPlayer.
+        fun nowMs(): Long = if (fb.active) vlcPos else player.currentPosition
+        fun seekTo(ms: Long) { if (fb.active) { vlc.seekTo(ms); vm.setVlcPosition(ms) } else vm.scrubTo(ms) }
+        fun finishScrub(ms: Long) { if (fb.active) seekTo(ms) else vm.finishScrub(ms) }
+        fun seekBy(deltaMs: Long) {
+            if (fb.active) seekTo((vlcPos + deltaMs).coerceIn(0L, if (durationMs > 0) durationMs else Long.MAX_VALUE)) else vm.skipBy(deltaMs)
+        }
+        fun togglePlayback() { if (fb.active) vm.toggleVlcPlaying() else vm.togglePlay() }
+        fun previous() { if (fb.active && vlcPos > 3_000L) seekTo(0L) else vm.playback.previous() }
         fun skip(side: Int) {
             val sec = settings.doubleTapSeconds
             if (skipSide == side && SystemClock.uptimeMillis() < skipWindowUntil) skipTotal += sec else { skipSide = side; skipTotal = sec }
-            vm.playback.seekBy(side * sec * 1000L)
+            seekBy(side * sec * 1000L)
             skipWindowUntil = SystemClock.uptimeMillis() + 800
             skipStamp++
         }
@@ -238,7 +293,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                 region != 0 && now < skipWindowUntil -> skip(region)                       // keep tapping to accumulate
                 now - lastTapAt < 280 -> {                                                  // double tap
                     pendingTap?.cancel(); lastTapAt = 0
-                    if (region == 0) vm.togglePlay() else skip(region)
+                    if (region == 0) togglePlayback() else skip(region)
                 }
                 else -> {                                                                   // maybe a single tap
                     lastTapAt = now
@@ -263,18 +318,18 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             GestureHandler(
                 deadZone = deadZone,
                 onTap = ::handleTap,
-                onSeekStart = { if (settings.gestureSeek) { scrubbing = true; scrubBase = player.currentPosition; scrubTarget = scrubBase; hud = HudKind.SEEK; hudStamp++ } },
+                onSeekStart = { if (settings.gestureSeek) { scrubbing = true; scrubBase = nowMs(); scrubTarget = scrubBase; hud = HudKind.SEEK; hudStamp++; if (!fb.active) vm.beginScrub() } },
                 onSeekDrag = { dx ->
-                    val dur = ui.durationMs
+                    val dur = durationMs
                     if (settings.gestureSeek && scrubbing && dur > 0) {
                         val msPerPx = min(dur, 600_000L).toFloat() / widthPx * settings.seekSensitivity
                         scrubTarget = (scrubTarget + dx * msPerPx).toLong().coerceIn(0L, dur)
                         hud = HudKind.SEEK; hudStamp++
                         val now = SystemClock.uptimeMillis()
-                        if (now - lastScrubSeek > 120) { vm.scrubTo(scrubTarget); lastScrubSeek = now }   // throttled live preview
+                        if (now - lastScrubSeek > 120) { seekTo(scrubTarget); lastScrubSeek = now }   // throttled live preview
                     }
                 },
-                onSeekEnd = { if (scrubbing) { vm.scrubTo(scrubTarget); scrubbing = false; hudStamp++ } },
+                onSeekEnd = { if (scrubbing) { finishScrub(scrubTarget); scrubbing = false; hudStamp++ } },
                 onBrightness = { d ->
                     if (settings.gestureBrightness) brightness = (brightness + d * 1.2f * settings.brightnessSensitivity).coerceIn(0.01f, 1f)
                     if (settings.gestureBrightness) { host.setBrightness(brightness); hud = HudKind.BRIGHTNESS; hudStamp++ }
@@ -296,8 +351,29 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             )
         )
 
-        // 1 — video surface (TextureView so zoom/pan transforms are rock solid)
-        VideoSurface(player, aspect, effectiveZoom, pan, Modifier.fillMaxSize())
+        // 1 — video surface: ExoPlayer (TextureView so zoom/pan transforms are rock solid), or LibVLC for files MediaCodec can't decode
+        if (fb.active) {
+            key(fb.uri) {
+                LibVlcFallbackPlayer(
+                    uri = fb.uri.toUri(),
+                    isPlaying = vlcPlaying,
+                    playbackSpeed = ui.speed,
+                    modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y },
+                    startPositionMs = fb.startMs,
+                    volumePercent = if (volume > 100f) volume.roundToInt() else 100,
+                    scaleType = aspect.toVlcScale(),
+                    handle = vlc,
+                    onTimeChanged = vm::onVlcTime,
+                    onLengthChanged = vm::onVlcLength,
+                    onEnded = { if (vm.onVlcEnded()) vlc.restart() },
+                    onError = vm::onVlcError,
+                    onVideoSize = { w, h -> host.lockOrientationFor(w, h) },
+                    onAudioFocusLost = { vm.setVlcPlaying(false) },
+                )
+            }
+        } else {
+            VideoSurface(player, aspect, effectiveZoom, pan, Modifier.fillMaxSize())
+        }
 
         // 2 — subtitles (our own pipeline → supports sync offset + styling)
         AndroidView(
@@ -333,7 +409,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                 HudKind.ZOOM -> Pill("Zoom ${(zoom * 100).roundToInt()}%", Modifier.align(Alignment.Center))
                 HudKind.NONE -> {}
             }
-            if (ui.buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(44.dp), color = Color.White, strokeWidth = 3.dp)
+            if (ui.buffering && !fb.active) CircularProgressIndicator(Modifier.align(Alignment.Center).size(44.dp), color = Color.White, strokeWidth = 3.dp)
 
             // 5 — controls
             AnimatedVisibility(controlsVisible && !locked, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
@@ -360,6 +436,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton({ host.finishPlayer() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
                             Text(ui.title, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                            if (fb.active) EngineBadge()
                             if (landscape) topActions()
                         }
                         if (!landscape) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { topActions() }
@@ -368,7 +445,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                         Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
                             .displayCutoutPadding().navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 0.dp, top = 12.dp),
                     ) {
-                        val dur = max(ui.durationMs, 1L)
+                        val dur = max(durationMs, 1L)
                         val shown = if (scrubbing) scrubTarget else position
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(formatDuration(shown), color = Color.White, style = MaterialTheme.typography.labelMedium)
@@ -377,15 +454,16 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                                 style = if (settings.videoProgressStyle == ProgressStyle.WAVE) ProgressStyle.FLAT else settings.videoProgressStyle,
                                 trackColor = Color.White.copy(alpha = 0.25f),
                                 onScrub = { f ->
+                                    if (!scrubbing && !fb.active) vm.beginScrub()
                                     scrubbing = true; scrubTarget = (f * dur).toLong()
                                     val now = SystemClock.uptimeMillis()
-                                    if (now - lastScrubSeek > 120) { vm.scrubTo(scrubTarget); lastScrubSeek = now }
+                                    if (now - lastScrubSeek > 120) { seekTo(scrubTarget); lastScrubSeek = now }
                                 },
-                                onSeekFinished = { f -> scrubTarget = (f * dur).toLong(); vm.scrubTo(scrubTarget); scrubbing = false },
+                                onSeekFinished = { f -> scrubTarget = (f * dur).toLong(); finishScrub(scrubTarget); scrubbing = false },
                                 modifier = Modifier.weight(1f).height(32.dp).padding(horizontal = 8.dp),
                             )
                             Text(
-                                if (settings.showRemainingTime) "-" + formatDuration((ui.durationMs - shown).coerceAtLeast(0L)) else formatDuration(ui.durationMs),
+                                if (settings.showRemainingTime) "-" + formatDuration((durationMs - shown).coerceAtLeast(0L)) else formatDuration(durationMs),
                                 color = Color.White, style = MaterialTheme.typography.labelMedium,
                             )
                         }
@@ -393,12 +471,12 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             IconButton({ locked = true; controlsVisible = false; lockHint = true }, Modifier.size(40.dp)) { Icon(Icons.Rounded.LockOpen, "Lock screen", tint = Color.White, modifier = Modifier.size(22.dp)) }
                             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton({ poke(); vm.playback.previous() }, Modifier.size(42.dp)) { Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(30.dp)) }
-                                IconButton({ poke(); vm.playback.seekBy(-10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
-                                Box(Modifier.size(54.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); vm.togglePlay() }, contentAlignment = Alignment.Center) {
-                                    Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(34.dp))
+                                IconButton({ poke(); previous() }, Modifier.size(42.dp)) { Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                IconButton({ poke(); seekBy(-10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                Box(Modifier.size(54.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); togglePlayback() }, contentAlignment = Alignment.Center) {
+                                    Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(34.dp))
                                 }
-                                IconButton({ poke(); vm.playback.seekBy(10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                IconButton({ poke(); seekBy(10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
                                 IconButton({ poke(); vm.playback.next() }, Modifier.size(42.dp), enabled = hasQueue) {
                                     Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White.copy(alpha = if (hasQueue) 1f else 0.35f), modifier = Modifier.size(30.dp))
                                 }
@@ -449,6 +527,9 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                 }
             }
 
+            // 7b — "Switched to Bluetooth" pill (never intercepts touches)
+            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().displayCutoutPadding().padding(top = btTop))
+
             // error card
             ui.error?.let { msg ->
                 Column(
@@ -459,6 +540,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     Text(msg, color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton({ vm.setDecoder(com.rhshourav.dhvon.data.settings.DecoderMode.SW) }) { Text("Try Software", color = p.textPrimary) }
+                        OutlinedButton({ vm.enterVlcFallback("Chosen manually") }) { Text("Try VLC", color = p.textPrimary) }
                         Button({ host.finishPlayer() }, colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White)) { Text("Close") }
                     }
                 }
@@ -524,4 +606,23 @@ private fun LevelHud(icon: ImageVector, fraction: Float, label: String, modifier
         }
         Text(label, color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.widthIn(min = 46.dp))
     }
+}
+
+/** Small "VLC" tag in the top bar while the software engine is playing (the DSP chain doesn't apply to it). */
+@Composable
+private fun EngineBadge() {
+    val p = LocalDhvon.current
+    Text(
+        "VLC", color = Color.White, style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.padding(end = 4.dp).clip(RoundedCornerShape(6.dp)).background(p.accent.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+private fun AspectMode.toVlcScale(): MediaPlayer.ScaleType = when (this) {
+    AspectMode.FIT -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
+    AspectMode.FILL -> MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
+    AspectMode.STRETCH -> MediaPlayer.ScaleType.SURFACE_FILL
+    AspectMode.R16_9 -> MediaPlayer.ScaleType.SURFACE_16_9
+    AspectMode.R4_3 -> MediaPlayer.ScaleType.SURFACE_4_3
+    AspectMode.ORIGINAL -> MediaPlayer.ScaleType.SURFACE_ORIGINAL
 }

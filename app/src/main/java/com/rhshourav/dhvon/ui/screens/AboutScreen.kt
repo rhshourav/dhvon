@@ -60,7 +60,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(p.card).padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Open-source credits", color = p.textPrimary, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "AndroidX Media3 / ExoPlayer · Jellyfin FFmpeg decoder for Media3 · Jetpack Compose · Hilt · Room · Coil · " +
+                        "AndroidX Media3 / ExoPlayer · Jellyfin FFmpeg decoder for Media3 · LibVLC by VideoLAN (LGPL-2.1+, software video fallback) · Jetpack Compose · Hilt · Room · Coil · " +
                             "Calvin Reorderable.\n\nLicensed GPL-3.0-or-later (required by the bundled FFmpeg decoder). " +
                             "Source code is available at the link above.",
                         color = p.textSecondary, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Start,

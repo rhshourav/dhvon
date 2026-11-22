@@ -9,6 +9,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
@@ -16,6 +17,10 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.extractor.ts.TsExtractor
 import com.rhshourav.dhvon.data.settings.DecoderMode
 import com.rhshourav.dhvon.data.settings.SeekSnap
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -71,18 +76,30 @@ class DhvonRenderersFactory(
  * Switching decoder mode rebuilds the player (renderers are fixed at construction) and restores queue + position.
  */
 @Singleton
-class PlayerHolder @Inject constructor(@ApplicationContext private val context: Context) {
+class PlayerHolder @Inject constructor(
+    @ApplicationContext private val context: Context,
+    /** Shared by every ExoPlayer this holder builds; also feeds the live Post-EQ in [AudioEffectsController]. */
+    val audioProcessor: DhvonAudioProcessor,
+) {
 
-    val audioProcessor = DhvonAudioProcessor()
     var decoderMode: DecoderMode = DecoderMode.HW
         private set
+
+    /** The user's "Seek precision" choice. Scrubbing temporarily overrides it (see [beginScrub] / [finishScrub]). */
+    private var userSeekParams: SeekParameters = SeekParameters.CLOSEST_SYNC
 
     private val _player = MutableStateFlow(create(DecoderMode.HW))
     val playerFlow: StateFlow<ExoPlayer> = _player.asStateFlow()
     val player: ExoPlayer get() = _player.value
 
-    private fun create(mode: DecoderMode): ExoPlayer =
-        ExoPlayer.Builder(context, DhvonRenderersFactory(context, mode, audioProcessor))
+    private fun create(mode: DecoderMode): ExoPlayer {
+        // .ts fixes: look ~282 KB ahead so late PAT/PMT tables (and their video PIDs) are found, accept non-IDR keyframes,
+        // and detect H.264 access units so broadcast captures don't open audio-only. CBR seeking helps MP3/ADTS/AMR.
+        val extractors = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+        return ExoPlayer.Builder(context, DhvonRenderersFactory(context, mode, audioProcessor), DefaultMediaSourceFactory(context, extractors))
             .setLooper(Looper.getMainLooper())
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
@@ -93,6 +110,18 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
+            .apply {
+                // Hardware audio offload would bypass DhvonAudioProcessor (and therefore the live spectral analysis).
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setAudioOffloadPreferences(
+                        TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                            .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
+                            .build()
+                    )
+                    .build()
+                setSeekParameters(userSeekParams)
+            }
+    }
 
     /** Rebuilds the player with a new decoder mode, preserving queue, position, speed, repeat/shuffle and track choices. */
     fun setDecoderMode(mode: DecoderMode) {
@@ -108,7 +137,7 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
             playbackParameters = old.playbackParameters
             repeatMode = old.repeatMode
             shuffleModeEnabled = old.shuffleModeEnabled
-            setSeekParameters(old.seekParameters)
+            setSeekParameters(userSeekParams)
             if (items.isNotEmpty()) {
                 setMediaItems(items, index.coerceAtLeast(0), position)
                 prepare()
@@ -121,14 +150,29 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
     }
 
     fun setSeekSnap(snap: SeekSnap) {
-        player.setSeekParameters(
-            when (snap) {
-                SeekSnap.EXACT -> SeekParameters.EXACT
-                SeekSnap.CLOSEST -> SeekParameters.CLOSEST_SYNC
-                SeekSnap.PREVIOUS -> SeekParameters.PREVIOUS_SYNC
-            }
-        )
+        userSeekParams = when (snap) {
+            SeekSnap.EXACT -> SeekParameters.EXACT
+            SeekSnap.CLOSEST -> SeekParameters.CLOSEST_SYNC
+            SeekSnap.PREVIOUS -> SeekParameters.PREVIOUS_SYNC
+        }
+        player.setSeekParameters(userSeekParams)
     }
+
+    /** Drag start / double-tap: land on the nearest keyframe so scrubbing 4K .mkv / .ts / .avi stays instant. */
+    fun beginScrub() = player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+
+    /**
+     * Drag release: one frame-accurate seek to where the finger stopped, then back to the user's chosen precision.
+     * The three calls are queued in order on the playback thread, so the seek really runs with EXACT.
+     */
+    fun finishScrub(targetMs: Long) {
+        player.setSeekParameters(SeekParameters.EXACT)
+        player.seekTo(targetMs.coerceAtLeast(0L))
+        player.setSeekParameters(userSeekParams)
+    }
+
+    /** Ends a keyframe-snapped skip (double-tap) without a final exact seek. */
+    fun endScrub() = player.setSeekParameters(userSeekParams)
 
     /** Turns the video renderer off while only audio is needed (background play) to save battery. */
     fun setVideoEnabled(enabled: Boolean) {

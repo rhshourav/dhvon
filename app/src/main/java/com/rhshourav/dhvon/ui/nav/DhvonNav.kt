@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
+import com.rhshourav.dhvon.player.ResumeResult
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,7 +40,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rhshourav.dhvon.VideoPlayerActivity
 import com.rhshourav.dhvon.ui.RootViewModel
-import com.rhshourav.dhvon.ui.components.MiniPlayer
 import com.rhshourav.dhvon.ui.screens.*
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
@@ -125,22 +128,28 @@ private fun MainScaffold(vm: RootViewModel, onPickFolder: () -> Unit) {
         )
     }
     val topLevel = route in items.map { it.route }
-    val showMini = playback.hasMedia && route != Routes.NOW_PLAYING
 
     fun go(r: String) = nav.navigate(r) { launchSingleTop = true }
     fun goTop(r: String) = nav.navigate(r) {
         popUpTo(Routes.HOME) { saveState = true }; launchSingleTop = true; restoreState = true
     }
     val openNowPlaying = { go(Routes.NOW_PLAYING) }
+    val scope = rememberCoroutineScope()
+    val playLast: () -> Unit = {
+        scope.launch {
+            when (vm.playback.resumeLast()) {
+                ResumeResult.AUDIO -> openNowPlaying()
+                ResumeResult.VIDEO -> {}
+                ResumeResult.NONE -> Toast.makeText(ctx, "Nothing played yet — play something and this button will resume it", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Scaffold(
         containerColor = p.background,
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             Column(Modifier.background(p.background)) {
-                if (showMini) MiniPlayer(playback, vm.playback, onOpen = {
-                    if (playback.isVideo) ctx.startActivity(Intent(ctx, VideoPlayerActivity::class.java)) else openNowPlaying()
-                })
                 if (topLevel) {
                     NavigationBar(containerColor = p.background, tonalElevation = 0.dp) {
                         items.forEach { item ->
@@ -158,7 +167,8 @@ private fun MainScaffold(vm: RootViewModel, onPickFolder: () -> Unit) {
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
+        Box(Modifier.padding(padding).fillMaxSize()) {
+        NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
             composable(Routes.HOME) {
                 HomeScreen(onNavigate = ::go, onOpenFolder = { go(Routes.folder(it)) }, onOpenNowPlaying = { openNowPlaying() }, onSwitchTab = ::goTop)
             }
@@ -186,6 +196,9 @@ private fun MainScaffold(vm: RootViewModel, onPickFolder: () -> Unit) {
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }, onPickFolder = onPickFolder, onAbout = { go(Routes.ABOUT) }) }
             composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SEARCH) { SearchScreen(onBack = { nav.popBackStack() }, onOpenNowPlaying = { openNowPlaying() }) }
+        }
+        // Sticky round button on the main tabs (hidden on full-screen / detail screens so it never covers content).
+        if (topLevel) NavFab(playing = playback.isPlaying, onPlayLast = playLast, modifier = Modifier.fillMaxSize())
         }
     }
 }

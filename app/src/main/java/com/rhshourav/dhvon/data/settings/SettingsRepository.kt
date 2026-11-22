@@ -62,6 +62,7 @@ data class AppSettings(
     val controlsHideSeconds: Int = 4,
     val showRemainingTime: Boolean = false,
     val edgeBufferDp: Int = 32,                    // video gestures ignore touches this close to a screen edge
+    val sleepCloseApp: Boolean = true,             // sleep timer also closes the app when it fires
     val restoreSession: Boolean = true,            // bring back the last queue after the process is killed
 )
 
@@ -106,6 +107,7 @@ object Keys {
     val REMAINING = booleanPreferencesKey("show_remaining")
     val EDGE_DP = intPreferencesKey("edge_buffer_dp")
     val RESTORE_SESSION = booleanPreferencesKey("restore_session")
+    val SLEEP_CLOSE = booleanPreferencesKey("sleep_close_app")
     val SESSION_QUEUE = stringPreferencesKey("session_queue")
     val SESSION_INDEX = intPreferencesKey("session_index")
     val SESSION_POS = longPreferencesKey("session_pos")
@@ -161,6 +163,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             showRemainingTime = p[Keys.REMAINING] ?: d.showRemainingTime,
             edgeBufferDp = p[Keys.EDGE_DP] ?: d.edgeBufferDp,
             restoreSession = p[Keys.RESTORE_SESSION] ?: d.restoreSession,
+            sleepCloseApp = p[Keys.SLEEP_CLOSE] ?: d.sleepCloseApp,
         )
     }
 

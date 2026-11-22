@@ -25,6 +25,7 @@ import com.rhshourav.dhvon.data.settings.*
 import com.rhshourav.dhvon.player.AudioEffectsController
 import com.rhshourav.dhvon.player.PlaybackController
 import com.rhshourav.dhvon.player.PlayerHolder
+import com.rhshourav.dhvon.player.SleepTimer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,7 @@ class VideoPlayerViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
     val effects: AudioEffectsController,
     private val waveform: WaveformExtractor,
+    val sleepTimer: SleepTimer,
 ) : ViewModel(), Player.Listener {
 
     val playerFlow = holder.playerFlow
@@ -296,6 +298,7 @@ class VideoPlayerViewModel @Inject constructor(
         _ui.update { it.copy(decoder = mode) }
     }
 
+    fun setSleepCloseApp(on: Boolean) = viewModelScope.launch { settingsRepo.set(Keys.SLEEP_CLOSE, on) }
     fun setBackgroundPlay(on: Boolean) = viewModelScope.launch { settingsRepo.set(Keys.BG_PLAY, on) }
     fun setSpeed(speed: Float) = playback.setSpeed(speed)
     fun setRepeat(mode: Int) = playback.setRepeat(mode)

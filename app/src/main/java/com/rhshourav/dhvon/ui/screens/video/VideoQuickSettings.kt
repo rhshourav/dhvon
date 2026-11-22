@@ -9,6 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -34,9 +37,14 @@ enum class AspectMode(val label: String) {
 
 val SubtitleColors = listOf(Color.White, Color(0xFFFFEB3B), Color(0xFF22C8E8), Color(0xFF7CFC00))
 
-private enum class Page { MAIN, DECODER, SPEED, ASPECT, SUBTITLES, AUDIO, MODE, REPEAT }
+private enum class Page { MAIN, DECODER, SPEED, ASPECT, SUBTITLES, AUDIO, MODE, REPEAT, SLEEP }
 
-/** The floating glass quick-settings menu: Decoder · Speed · Aspect · Subtitles(+sync) · Audio(+delay) · Play mode · Repeat. */
+private fun remainingLabel(ms: Long): String {
+    val s = ms / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
+/** The floating glass quick-settings menu: Decoder · Speed · Aspect · Subtitles(+sync) · Audio(+delay) · Play mode · Repeat · Sleep timer. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun QuickSettingsMenu(
@@ -51,6 +59,7 @@ fun QuickSettingsMenu(
 ) {
     val p = LocalDhvon.current
     var page by remember { mutableStateOf(Page.MAIN) }
+    val sleep by vm.sleepTimer.state.collectAsStateWithLifecycle()
 
     Column(
         modifier.width(320.dp).heightIn(max = 360.dp).clip(RoundedCornerShape(20.dp)).background(p.card.copy(alpha = 0.96f))
@@ -66,6 +75,7 @@ fun QuickSettingsMenu(
                 MenuRow("Audio Track", ui.audioTracks.firstOrNull { it.selected }?.label ?: "Default") { page = Page.AUDIO }
                 MenuRow("Play Mode", if (settings.backgroundPlay) "Background" else "Video") { page = Page.MODE }
                 MenuRow("Repeat", when (ui.repeatMode) { Player.REPEAT_MODE_ONE -> "One"; Player.REPEAT_MODE_ALL -> "All"; else -> "Off" }) { page = Page.REPEAT }
+                MenuRow("Sleep timer", if (!sleep.active) "Off" else if (sleep.endOfTrack) "End of video" else remainingLabel(sleep.remainingMs)) { page = Page.SLEEP }
             }
             Page.DECODER -> {
                 Header("Decoder") { page = Page.MAIN }
@@ -143,6 +153,37 @@ fun QuickSettingsMenu(
                     Switch(settings.backgroundPlay, vm::setBackgroundPlay, colors = SwitchDefaults.colors(checkedTrackColor = p.accent))
                 }
                 MenuRow("Pop-up window (PiP)", "") { onPip() }
+            }
+            Page.SLEEP -> {
+                Header("Sleep timer") { page = Page.MAIN }
+                if (sleep.active) Text(
+                    if (sleep.endOfTrack) "Stops at the end of this video" else "Stops in ${remainingLabel(sleep.remainingMs)}",
+                    color = p.accent, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+                )
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Close DHVON when it ends", color = p.textPrimary, style = MaterialTheme.typography.titleSmall)
+                        Text("Stops playback, closes the app and removes it from recents", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(settings.sleepCloseApp, vm::setSleepCloseApp, colors = SwitchDefaults.colors(checkedTrackColor = p.accent))
+                }
+                HorizontalDivider(color = p.elevated)
+                RadioRow("Off", null, !sleep.active) { vm.sleepTimer.cancel() }
+                listOf(5, 10, 15, 30, 45, 60, 90, 120).forEach { m ->
+                    RadioRow("$m minutes", null, false) { vm.sleepTimer.startMinutes(m, settings.sleepCloseApp) }
+                }
+                RadioRow("End of this video", null, sleep.endOfTrack) { vm.sleepTimer.startEndOfTrack(settings.sleepCloseApp) }
+                var custom by remember { mutableStateOf("") }
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        custom, { txt -> custom = txt.filter { it.isDigit() }.take(3) }, label = { Text("Custom minutes") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        { custom.toIntOrNull()?.takeIf { it in 1..999 }?.let { vm.sleepTimer.startMinutes(it, settings.sleepCloseApp) } },
+                        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
+                    ) { Text("Start") }
+                }
             }
             Page.REPEAT -> {
                 Header("Repeat") { page = Page.MAIN }

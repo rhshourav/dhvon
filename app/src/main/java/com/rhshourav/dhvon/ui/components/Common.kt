@@ -303,34 +303,3 @@ fun FolderCard(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Mo
         }
     }
 }
-
-// ------------------------------------------------------------------------------------------------ mini player
-
-@Composable
-fun MiniPlayer(state: PlaybackUiState, controller: PlaybackController, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalDhvon.current
-    val pos by rememberPositionMs(controller)
-    val fraction = if (state.durationMs > 0) (pos.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
-    val art = remember(state.uri, state.isVideo) {
-        MediaFile(0, state.uri, state.title, state.title, state.durationMs, 0, 0, "", state.isVideo)
-    }
-    Surface(
-        onClick = onOpen, modifier = modifier.padding(horizontal = 10.dp, vertical = 6.dp).fillMaxWidth().height(62.dp),
-        shape = RoundedCornerShape(18.dp), color = p.elevated, shadowElevation = 8.dp,
-    ) {
-        Box {
-            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                MediaThumb(art, Modifier.padding(7.dp).size(48.dp), RoundedCornerShape(12.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(state.title, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(state.subtitle.ifBlank { if (state.isVideo) "Video" else "Unknown artist" }, color = p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                }
-                IconButton(onClick = controller::togglePlayPause) {
-                    SilverIcon(if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", Modifier.size(30.dp))
-                }
-                IconButton(onClick = controller::next) { SilverIcon(Icons.Rounded.SkipNext, "Next", Modifier.size(28.dp)) }
-            }
-            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(fraction).height(2.dp).background(p.accent))
-        }
-    }
-}

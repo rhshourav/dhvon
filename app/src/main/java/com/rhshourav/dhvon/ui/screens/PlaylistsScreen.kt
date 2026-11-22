@@ -87,7 +87,7 @@ fun PlaylistsScreen(onOpenPlaylist: (Long) -> Unit, onOpenFolder: (String) -> Un
         }
         FloatingActionButton(
             onClick = { creating = true }, containerColor = p.accent, contentColor = Color.White,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),   // bottom-end belongs to the round DHVON button
         ) { Icon(Icons.Rounded.Add, "New playlist") }
     }
     if (creating) TextInputDialog("New playlist", "", "Name", "Create", { vm.create(it); creating = false }, { creating = false })

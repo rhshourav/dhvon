@@ -136,6 +136,6 @@ fun LibraryScreen(
             }
         }
     }
-    StorageBar(ui.storage, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp))
+    StorageBar(ui.storage, Modifier.fillMaxWidth().padding(start = 20.dp, end = 96.dp, top = 10.dp, bottom = 10.dp))
     }
 }

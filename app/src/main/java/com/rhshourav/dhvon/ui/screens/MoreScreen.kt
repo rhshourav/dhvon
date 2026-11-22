@@ -20,6 +20,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rhshourav.dhvon.player.SleepTimer
+import com.rhshourav.dhvon.data.settings.Keys
+import com.rhshourav.dhvon.data.settings.SettingsRepository
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import com.rhshourav.dhvon.ui.components.DhvonWordmark
 import com.rhshourav.dhvon.ui.components.SilverIcon
 import com.rhshourav.dhvon.ui.components.WaveGlow
@@ -29,12 +37,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
 @HiltViewModel
-class MoreViewModel @Inject constructor(val sleep: SleepTimer) : ViewModel()
+class MoreViewModel @Inject constructor(val sleep: SleepTimer, private val settingsRepo: SettingsRepository) : ViewModel() {
+    val closeApp: StateFlow<Boolean> = settingsRepo.settings.map { it.sleepCloseApp }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    fun setCloseApp(on: Boolean) { viewModelScope.launch { settingsRepo.set(Keys.SLEEP_CLOSE, on) } }
+}
 
 @Composable
 fun MoreScreen(onNavigate: (String) -> Unit, onSwitchTab: (String) -> Unit, vm: MoreViewModel = hiltViewModel()) {
     val p = LocalDhvon.current
     val timer by vm.sleep.state.collectAsStateWithLifecycle()
+    val closeApp by vm.closeApp.collectAsStateWithLifecycle()
     var sleepSheet by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(p.background)) {
@@ -54,9 +66,16 @@ fun MoreScreen(onNavigate: (String) -> Unit, onSwitchTab: (String) -> Unit, vm: 
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Sleep timer", color = p.textPrimary, style = MaterialTheme.typography.titleLarge)
             Text(if (timer.active) "Playback will pause automatically." else "Pause playback automatically.", color = p.textSecondary, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(8.dp))
-            listOf(5, 10, 15, 30, 45, 60).forEach { m -> SleepOption("$m minutes") { vm.sleep.startMinutes(m); sleepSheet = false } }
-            SleepOption("End of current track") { vm.sleep.startEndOfTrack(); sleepSheet = false }
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Close DHVON when it ends", color = p.textPrimary, style = MaterialTheme.typography.titleSmall)
+                    Text("Also closes the app and removes it from recents", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(closeApp, vm::setCloseApp, colors = SwitchDefaults.colors(checkedTrackColor = p.accent))
+            }
+            Spacer(Modifier.height(4.dp))
+            listOf(5, 10, 15, 30, 45, 60, 90, 120).forEach { m -> SleepOption("$m minutes") { vm.sleep.startMinutes(m, closeApp); sleepSheet = false } }
+            SleepOption("End of current track") { vm.sleep.startEndOfTrack(closeApp); sleepSheet = false }
             if (timer.active) SleepOption("Turn off timer") { vm.sleep.cancel(); sleepSheet = false }
         }
     }

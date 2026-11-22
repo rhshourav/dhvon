@@ -101,7 +101,7 @@ fun HomeScreen(
         if (!file.isVideo) onOpenNowPlaying()
     }
 
-    LazyColumn(Modifier.fillMaxSize().background(p.background), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(p.background), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 DhvonWordmark(Modifier.weight(1f))

@@ -199,7 +199,11 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     val subtitlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.loadExternalSubtitle(uri) }
 
     // ---- side effects
-    LaunchedEffect(ui.mediaKey, ui.videoWidth, ui.videoHeight) { if (ui.videoWidth > 0 && ui.videoHeight > 0) host.lockOrientationFor(ui.videoWidth, ui.videoHeight) }
+    LaunchedEffect(ui.mediaKey, ui.videoWidth, ui.videoHeight, audioMode) {
+        if (!audioMode && ui.videoWidth > 0 && ui.videoHeight > 0) host.lockOrientationFor(ui.videoWidth, ui.videoHeight)
+    }
+    // Audio mode is a portrait experience: rotate up when entering it; leaving restores the video's own orientation (effect above).
+    LaunchedEffect(audioMode) { if (audioMode) host.lockOrientationFor(1, 2) }
     LaunchedEffect(ui.notice) { ui.notice?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.consumeNotice() } }
     LaunchedEffect(controlsVisible, ui.isPlaying, menuOpen, playlistOpen, scrubbing, interaction) {
         if (controlsVisible && ui.isPlaying && !menuOpen && !playlistOpen && !scrubbing) { delay(settings.controlsHideSeconds * 1000L); controlsVisible = false }
@@ -362,7 +366,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     }
                     Column(
                         Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-                            .displayCutoutPadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 8.dp, top = 24.dp),
+                            .displayCutoutPadding().navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 0.dp, top = 12.dp),
                     ) {
                         val dur = max(ui.durationMs, 1L)
                         val shown = if (scrubbing) scrubTarget else position
@@ -378,7 +382,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                                     if (now - lastScrubSeek > 120) { vm.scrubTo(scrubTarget); lastScrubSeek = now }
                                 },
                                 onSeekFinished = { f -> scrubTarget = (f * dur).toLong(); vm.scrubTo(scrubTarget); scrubbing = false },
-                                modifier = Modifier.weight(1f).height(40.dp).padding(horizontal = 10.dp),
+                                modifier = Modifier.weight(1f).height(32.dp).padding(horizontal = 8.dp),
                             )
                             Text(
                                 if (settings.showRemainingTime) "-" + formatDuration((ui.durationMs - shown).coerceAtLeast(0L)) else formatDuration(ui.durationMs),
@@ -386,20 +390,20 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                             )
                         }
                         val hasQueue = pb.queue.size > 1
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton({ poke(); vm.playback.previous() }, Modifier.size(48.dp)) { Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(32.dp)) }
-                            IconButton({ poke(); vm.playback.seekBy(-10_000) }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
-                            Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); vm.togglePlay() }, contentAlignment = Alignment.Center) {
-                                Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(38.dp))
-                            }
-                            IconButton({ poke(); vm.playback.seekBy(10_000) }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
-                            IconButton({ poke(); vm.playback.next() }, Modifier.size(48.dp), enabled = hasQueue) {
-                                Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White.copy(alpha = if (hasQueue) 1f else 0.35f), modifier = Modifier.size(32.dp))
-                            }
-                        }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            IconButton({ locked = true; controlsVisible = false; lockHint = true }) { Icon(Icons.Rounded.LockOpen, "Lock screen", tint = Color.White) }
-                            IconButton({ poke(); host.toggleOrientation() }) { Icon(if (landscape) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, "Rotate", tint = Color.White) }
+                            IconButton({ locked = true; controlsVisible = false; lockHint = true }, Modifier.size(40.dp)) { Icon(Icons.Rounded.LockOpen, "Lock screen", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconButton({ poke(); vm.playback.previous() }, Modifier.size(42.dp)) { Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                IconButton({ poke(); vm.playback.seekBy(-10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                Box(Modifier.size(54.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { poke(); vm.togglePlay() }, contentAlignment = Alignment.Center) {
+                                    Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(34.dp))
+                                }
+                                IconButton({ poke(); vm.playback.seekBy(10_000) }, Modifier.size(42.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(30.dp)) }
+                                IconButton({ poke(); vm.playback.next() }, Modifier.size(42.dp), enabled = hasQueue) {
+                                    Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White.copy(alpha = if (hasQueue) 1f else 0.35f), modifier = Modifier.size(30.dp))
+                                }
+                            }
+                            IconButton({ poke(); host.toggleOrientation() }, Modifier.size(40.dp)) { Icon(if (landscape) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, "Rotate", tint = Color.White, modifier = Modifier.size(24.dp)) }
                         }
                     }
                 }

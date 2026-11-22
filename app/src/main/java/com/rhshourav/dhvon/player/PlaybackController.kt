@@ -35,6 +35,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
+/** What the round button did when tapped. */
+enum class ResumeResult { NONE, VIDEO, AUDIO }
+
 data class QueueEntry(val uri: String, val title: String, val subtitle: String, val isVideo: Boolean, val durationMs: Long)
 
 data class PlaybackUiState(
@@ -164,6 +167,32 @@ class PlaybackController @Inject constructor(
             if (physical != null) userData.setFolderLastPlayed(physical, uri, title)
             if (ctx != null && ctx != physical) userData.setFolderLastPlayed(ctx, uri, title)
         }
+    }
+
+    private fun openVideoUi() {
+        context.startActivity(Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /**
+     * The round button: resume whatever was playing last.
+     * A loaded (paused / restored) queue just plays; otherwise the most recently played file is started inside its own
+     * folder so playback continues with the files that follow it. Audio → caller opens Now Playing; video opens itself.
+     */
+    suspend fun resumeLast(): ResumeResult {
+        val cur = state.value
+        if (cur.hasMedia) {
+            ensureService()
+            val p = holder.player
+            if (!p.isPlaying) { if (p.playbackState == Player.STATE_ENDED) p.seekTo(0); p.play() }
+            return if (cur.isVideo) { openVideoUi(); ResumeResult.VIDEO } else ResumeResult.AUDIO
+        }
+        val lib = media.library.value
+        val last = userData.recent.first().firstNotNullOfOrNull { e -> lib.find(e.uri) } ?: return ResumeResult.NONE
+        val siblings = lib.all.filter { it.folderPath == last.folderPath && it.isVideo == last.isVideo }
+            .sortedBy { it.displayName.lowercase() }.ifEmpty { listOf(last) }
+        val idx = siblings.indexOfFirst { it.uri == last.uri }.coerceAtLeast(0)
+        return if (last.isVideo) { playVideo(siblings, idx, last.folderPath); ResumeResult.VIDEO }
+        else { playAudio(siblings, idx, false, last.folderPath); ResumeResult.AUDIO }
     }
 
     private fun ensureService() { runCatching { context.startService(Intent(context, DhvonPlaybackService::class.java)) } }

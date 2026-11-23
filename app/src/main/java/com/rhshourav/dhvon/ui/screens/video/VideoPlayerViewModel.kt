@@ -125,6 +125,18 @@ class VideoPlayerViewModel @Inject constructor(
     private var embeddedCues: List<Cue> = emptyList()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    // ------------------------------------------------------------------ screen dimming (brightness gesture below the panel's minimum)
+
+    private val _extraDim = MutableStateFlow(0f)
+    /** 0..1 — how much darker than the panel's lowest brightness the screen is (drawn as a black overlay by the screen). */
+    val extraDim: StateFlow<Float> = _extraDim.asStateFlow()
+    private val _brightnessEpoch = MutableStateFlow(0)
+    /** Bumps whenever a video is (re)opened, so the screen re-reads the phone's own brightness. */
+    val brightnessEpoch: StateFlow<Int> = _brightnessEpoch.asStateFlow()
+
+    fun setExtraDim(value: Float) { _extraDim.value = value.coerceIn(0f, 1f) }
+    fun resetDisplayToPhoneLevel() { _extraDim.value = 0f; _brightnessEpoch.update { it + 1 } }
+
     // ------------------------------------------------------------------ LibVLC software fallback
 
     /** [active] while LibVLC (not ExoPlayer) plays the current file because MediaCodec has no decoder for its video. */

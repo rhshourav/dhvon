@@ -84,6 +84,9 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // A fresh open starts from the phone's own brightness — not from whatever the previous video was dimmed to.
+        window.attributes = window.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+        vm.resetDisplayToPhoneLevel()
         handleIntent(intent)
     }
 
@@ -145,7 +148,8 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
     override fun currentBrightness(): Float {
         val b = window.attributes.screenBrightness
         if (b >= 0f) return b
-        return runCatching { Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f }.getOrDefault(0.5f)
+        // No window override yet → this is the phone's own brightness setting (0–255).
+        return runCatching { Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f }.getOrDefault(0.5f).coerceIn(0.01f, 1f)
     }
 
     override fun setBrightness(value: Float) {

@@ -2,12 +2,14 @@
 // Created by rhshourav · https://github.com/rhshourav/DHVON · GPL-3.0-or-later
 package com.rhshourav.dhvon.data.media
 
+import android.Manifest
 import android.app.RecoverableSecurityException
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.IntentSender
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -20,6 +22,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media as AudioMedia
 import android.provider.MediaStore.Video.Media as VideoMedia
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.rhshourav.dhvon.data.settings.SettingsRepository
 import com.rhshourav.dhvon.di.ApplicationScope
@@ -39,6 +42,8 @@ import javax.inject.Singleton
 sealed interface OpResult {
     data object Done : OpResult
     data class NeedsGrant(val sender: IntentSender) : OpResult
+    /** Android 9 and older: deleting needs the legacy WRITE_EXTERNAL_STORAGE permission, which the UI must ask for. */
+    data object NeedsStoragePermission : OpResult
     data class Failed(val message: String) : OpResult
 }
 
@@ -283,21 +288,41 @@ class MediaRepository @Inject constructor(
 
     fun isDocumentUri(uri: Uri): Boolean = runCatching { DocumentsContract.isDocumentUri(context, uri) }.getOrDefault(false)
 
+    private fun hasLegacyWritePermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Android 11+: one system dialog deletes the whole batch. Android 10: the dialog only unlocks a file, so the caller
+     * re-runs this after consent (see onGrantResult) until nothing throws. Android 9 and older: needs the legacy write permission.
+     * Files in folders added with "Add folder" are deleted through the document provider (needs the write grant requested
+     * since 3.0.1 — folders added earlier only hold a read grant).
+     */
     fun requestDelete(uris: List<Uri>): OpResult {
         val docs = uris.filter { DocumentsContract.isDocumentUri(context, it) }
-        docs.forEach { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+        val docsFailed = docs.count { !runCatching { DocumentsContract.deleteDocument(resolver, it) }.getOrDefault(false) }
         val media = uris.filterNot { it in docs }
-        if (media.isEmpty()) return OpResult.Done
+        if (media.isEmpty()) {
+            return if (docsFailed == 0) OpResult.Done
+            else OpResult.Failed("Couldn't delete $docsFailed file(s) from an added folder — remove that folder in Settings → Library and add it again to allow deleting")
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             OpResult.NeedsGrant(MediaStore.createDeleteRequest(resolver, media).intentSender)
         } else try {
             media.forEach { resolver.delete(it, null, null) }
             OpResult.Done
         } catch (e: SecurityException) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && e is RecoverableSecurityException)
-                OpResult.NeedsGrant(e.userAction.actionIntent.intentSender)
-            else OpResult.Failed("Android blocked the delete")
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && e is RecoverableSecurityException -> OpResult.NeedsGrant(e.userAction.actionIntent.intentSender)
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !hasLegacyWritePermission() -> OpResult.NeedsStoragePermission
+                else -> OpResult.Failed("Android blocked the delete")
+            }
         }
+    }
+
+    /** After a folder's media is gone, remove the directory too if nothing else is left in it (best effort — scoped storage may refuse). */
+    fun removeEmptyFolder(path: String) {
+        if (path.isBlank() || path == "Unknown" || path.startsWith("saf:") || path.startsWith("@")) return
+        runCatching { java.io.File(path).takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete() }
     }
 
     /** Rename/move need a write grant (Android 11+). Lower versions don't support these without broad storage access. */

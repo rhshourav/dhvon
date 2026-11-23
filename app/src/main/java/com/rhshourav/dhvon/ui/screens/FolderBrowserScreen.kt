@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -67,7 +68,8 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 sealed interface PendingOp {
-    data class Delete(val uris: List<Uri>) : PendingOp
+    /** [folderPath] is set when a whole folder is being deleted, so the empty directory can be removed afterwards. */
+    data class Delete(val uris: List<Uri>, val folderPath: String? = null) : PendingOp
     data class Rename(val uri: Uri, val newName: String) : PendingOp
     data class Move(val uris: List<Uri>, val relativePath: String) : PendingOp
 }
@@ -75,6 +77,8 @@ sealed interface PendingOp {
 sealed interface FileEvent {
     data class Grant(val sender: IntentSender, val op: PendingOp) : FileEvent
     data class Message(val text: String) : FileEvent
+    /** Android 9 and older: ask for the legacy storage permission, then retry [op]. */
+    data class NeedWritePermission(val op: PendingOp) : FileEvent
 }
 
 @HiltViewModel
@@ -170,7 +174,10 @@ class FolderViewModel @Inject constructor(
     fun onGrantResult(ok: Boolean, op: PendingOp) = viewModelScope.launch {
         if (!ok) { _events.send(FileEvent.Message("Cancelled")); return@launch }
         when (op) {
-            is PendingOp.Delete -> finish(op)
+            // Android 11+ already deleted the files; on 10 and below the consent only unlocks them, so delete again.
+            is PendingOp.Delete ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) finish(op)
+                else handle(withContext(Dispatchers.IO) { media.requestDelete(op.uris) }, op)
             is PendingOp.Rename -> finishIf(withContext(Dispatchers.IO) { media.renameGranted(op.uri, op.newName) }, op)
             is PendingOp.Move -> finishIf(withContext(Dispatchers.IO) { media.moveGranted(op.uris, op.relativePath) }, op)
         }
@@ -179,6 +186,7 @@ class FolderViewModel @Inject constructor(
     private suspend fun handle(res: OpResult, op: PendingOp) = when (res) {
         OpResult.Done -> finish(op)
         is OpResult.NeedsGrant -> _events.send(FileEvent.Grant(res.sender, op))
+        OpResult.NeedsStoragePermission -> _events.send(FileEvent.NeedWritePermission(op))
         is OpResult.Failed -> _events.send(FileEvent.Message(res.message))
     }
 
@@ -189,6 +197,7 @@ class FolderViewModel @Inject constructor(
     }
 
     private suspend fun finish(op: PendingOp) {
+        if (op is PendingOp.Delete && op.folderPath != null) withContext(Dispatchers.IO) { media.removeEmptyFolder(op.folderPath) }
         media.refresh(); _selected.value = emptySet()
         _events.send(FileEvent.Message(when (op) { is PendingOp.Delete -> "Deleted"; is PendingOp.Rename -> "Renamed"; is PendingOp.Move -> "Moved" }))
     }
@@ -214,20 +223,8 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
     var showRename by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
-    var pendingOp by remember { mutableStateOf<PendingOp?>(null) }
 
-    val grantLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        pendingOp?.let { vm.onGrantResult(r.resultCode == Activity.RESULT_OK, it) }
-        pendingOp = null
-    }
-    LaunchedEffect(Unit) {
-        vm.events.collect { e ->
-            when (e) {
-                is FileEvent.Grant -> { pendingOp = e.op; grantLauncher.launch(IntentSenderRequest.Builder(e.sender).build()) }
-                is FileEvent.Message -> Toast.makeText(ctx, e.text, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+    FileEventHost(vm.events) { ok, op -> vm.onGrantResult(ok, op) }
     BackHandler(enabled = selecting || searching) { if (selecting) vm.clearSelection() else { searching = false; vm.query.value = "" } }
 
     val selectedFiles = ui.items.filter { it.uri in selected }

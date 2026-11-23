@@ -280,6 +280,7 @@ class PlaybackController @Inject constructor(
         holder.setSeekSnap(prefs.seekSnap)
         val p = holder.player
         p.setMediaItems(files.map { it.toMediaItem() }, index, startMs)
+        if (shuffle) p.shuffleFromCurrent()          // start item first, then every other item once — nothing is skipped
         p.shuffleModeEnabled = shuffle
         p.prepare()
         p.playWhenReady = true
@@ -325,7 +326,12 @@ class PlaybackController @Inject constructor(
         p.seekTo((p.currentPosition + deltaMs).coerceIn(0, dur))
     }
     fun skipTo(index: Int) = holder.player.seekTo(index, C.TIME_UNSET)
-    fun toggleShuffle() { val p = holder.player; p.shuffleModeEnabled = !p.shuffleModeEnabled }
+    fun toggleShuffle() {
+        val p = holder.player
+        val on = !p.shuffleModeEnabled
+        if (on) p.shuffleFromCurrent()               // turning shuffle on mid-queue must still reach every other item
+        p.shuffleModeEnabled = on
+    }
     /** Off → Loop All → Loop One. */
     fun cycleRepeat() {
         val p = holder.player

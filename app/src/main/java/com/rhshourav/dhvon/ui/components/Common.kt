@@ -264,11 +264,28 @@ fun MediaCard(file: MediaFile, onClick: () -> Unit, modifier: Modifier = Modifie
 
 // ------------------------------------------------------------------------------------------------ folders
 
+/** The "⋮" on a folder: today just "Delete folder". [onMedia] gives it a dark chip so it stays readable on thumbnails. */
 @Composable
-fun FolderRow(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun FolderMenu(onDelete: () -> Unit, modifier: Modifier = Modifier, onMedia: Boolean = false) {
+    val p = LocalDhvon.current
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        IconButton(
+            onClick = { open = true },
+            modifier = Modifier.size(36.dp).then(if (onMedia) Modifier.clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)) else Modifier),
+        ) { Icon(Icons.Rounded.MoreVert, "Folder options", tint = if (onMedia) Color.White else p.textSecondary, modifier = Modifier.size(20.dp)) }
+        DropdownMenu(open, { open = false }, containerColor = p.elevated) {
+            DropdownMenuItem({ Text("Delete folder") }, { open = false; onDelete() }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
+        }
+    }
+}
+
+/** [onDelete] adds a "⋮ → Delete folder" menu and makes a long-press do the same. */
+@Composable
+fun FolderRow(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Modifier, onDelete: (() -> Unit)? = null) {
     val p = LocalDhvon.current
     Row(
-        modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (LocalCompact.current) 8.dp else 12.dp),
+        modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onDelete).padding(horizontal = 20.dp, vertical = if (LocalCompact.current) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Folder, null, tint = p.accent, modifier = Modifier.size(46.dp))
@@ -278,13 +295,14 @@ fun FolderRow(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Mod
             Text(folder.summary, color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
         }
         Text(formatDate(folder.lastModifiedSec), color = p.textSecondary, style = MaterialTheme.typography.labelMedium)
+        if (onDelete != null) FolderMenu(onDelete, Modifier.padding(start = 4.dp))
     }
 }
 
 @Composable
-fun FolderCard(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun FolderCard(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Modifier, onDelete: (() -> Unit)? = null) {
     val p = LocalDhvon.current
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(p.card).clickable(onClick = onClick)) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(p.card).combinedClickable(onClick = onClick, onLongClick = onDelete)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1.5f).background(p.elevated), contentAlignment = Alignment.Center) {
             val covers = folder.coverUris
             if (covers.isEmpty()) Icon(Icons.Rounded.Folder, null, tint = p.accent, modifier = Modifier.size(56.dp))
@@ -296,6 +314,7 @@ fun FolderCard(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Mo
                     }
                 }
             }
+            if (onDelete != null) FolderMenu(onDelete, Modifier.align(Alignment.TopEnd).padding(6.dp), onMedia = true)
         }
         Column(Modifier.padding(12.dp)) {
             Text(folder.name, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

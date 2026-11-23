@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -68,6 +69,21 @@ class DhvonRenderersFactory(
             DecoderMode.SW -> all.sortedBy { if (it.softwareOnly) 0 else 1 }
         }
     }
+}
+
+/**
+ * Shuffle that plays EVERYTHING. ExoPlayer's default shuffle order is a random permutation in which the *current* item sits at a
+ * random spot, and playback only walks forward from there — so "Shuffle" used to play the few tracks after that spot and then end.
+ * This order starts at the current item and then visits every other item exactly once.
+ */
+fun ExoPlayer.shuffleFromCurrent() {
+    val n = mediaItemCount
+    if (n <= 1) return
+    val current = currentMediaItemIndex.coerceIn(0, n - 1)
+    val order = IntArray(n)
+    order[0] = current
+    (0 until n).filter { it != current }.shuffled().forEachIndexed { i, index -> order[i + 1] = index }
+    setShuffleOrder(DefaultShuffleOrder(order, System.nanoTime()))
 }
 
 /**
@@ -140,6 +156,7 @@ class PlayerHolder @Inject constructor(
             setSeekParameters(userSeekParams)
             if (items.isNotEmpty()) {
                 setMediaItems(items, index.coerceAtLeast(0), position)
+                if (shuffleModeEnabled) shuffleFromCurrent()      // the rebuilt player must not lose part of the queue
                 prepare()
                 playWhenReady = play
             }

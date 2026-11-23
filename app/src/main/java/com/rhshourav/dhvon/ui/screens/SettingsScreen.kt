@@ -126,6 +126,7 @@ fun SettingsScreen(onBack: () -> Unit, onPickFolder: () -> Unit, onAbout: () -> 
             SwitchRow("Auto picture-in-picture", "Shrink the video to a window when you leave the app", s.autoPip) { vm.set(Keys.AUTO_PIP, it) }
             SwitchRow("Background audio play", "Keep playing video audio when the app is minimised", s.backgroundPlay) { vm.set(Keys.BG_PLAY, it) }
             SwitchRow("Restore last session", "After Android closes the app, bring back your queue (paused) at the same spot", s.restoreSession) { vm.set(Keys.RESTORE_SESSION, it) }
+            SwitchRow("Safe headphone volume", "When headphones connect: cap the volume at 40% and fade the sound in", s.safeHeadphoneVolume) { vm.set(Keys.SAFE_HP_VOLUME, it) }
             OutlinedButton({ runCatching { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }) { Text("Background play keeps stopping? Battery settings", color = p.textPrimary) }
             Text("Some phones (Xiaomi, Huawei, Samsung…) stop background audio unless DHVON is set to “Unrestricted / Don't optimise”.", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
 

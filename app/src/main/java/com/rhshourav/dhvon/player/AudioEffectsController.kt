@@ -144,17 +144,27 @@ class AudioEffectsController @Inject constructor(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val knownBluetooth = HashSet<Int>()
 
+    private val knownHeadphones = HashSet<Int>()
+
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
-            // Only devices that were NOT already connected count as a "switch" (the callback also replays existing ones).
+            // Only devices that were NOT already connected count (the callback also replays the ones that already were).
+            if (addedDevices.filter { isHeadphoneSink(it) && knownHeadphones.add(it.id) }.isNotEmpty()) onHeadphonesConnected()
             val fresh = addedDevices.filter { isBluetoothSink(it) && knownBluetooth.add(it.id) }
             val dev = fresh.firstOrNull() ?: return
             _bluetoothConnectedEvent.tryEmit(dev.productName?.toString()?.takeIf { it.isNotBlank() } ?: "Bluetooth Audio")
         }
 
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
-            removedDevices.forEach { knownBluetooth.remove(it.id) }
+            removedDevices.forEach { knownBluetooth.remove(it.id); knownHeadphones.remove(it.id) }
         }
+    }
+
+    private fun isHeadphoneSink(d: AudioDeviceInfo): Boolean = d.isSink && when (d.type) {
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> true
+        else -> (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && d.type == AudioDeviceInfo.TYPE_BLE_HEADSET) ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && d.type == AudioDeviceInfo.TYPE_HEARING_AID)
     }
 
     private fun isBluetoothSink(d: AudioDeviceInfo): Boolean = d.isSink && (
@@ -169,7 +179,9 @@ class AudioEffectsController @Inject constructor(
         if (started) return
         started = true
         runCatching {
-            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter { isBluetoothSink(it) }.forEach { knownBluetooth.add(it.id) }
+            val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            outputs.filter { isBluetoothSink(it) }.forEach { knownBluetooth.add(it.id) }
+            outputs.filter { isHeadphoneSink(it) }.forEach { knownHeadphones.add(it.id) }
             audioManager.registerAudioDeviceCallback(deviceCallback, null)
         }
         scope.launch { holder.audioProcessor.metrics.collect { onSpectrum(it) } }
@@ -183,6 +195,8 @@ class AudioEffectsController @Inject constructor(
         sessionListener?.let { l -> attachedExo?.removeListener(l) }
         val l = object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) { attachToPlayer(p, audioSessionId) }
+            // Headphones were connected while paused: cap the volume *before* the next play actually starts.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { if (playWhenReady && pendingSafeVolume) applySafeVolume() }
         }
         sessionListener = l
         attachedExo = p
@@ -446,6 +460,45 @@ class AudioEffectsController @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------------ headphone safety
+
+    private var pendingSafeVolume = false
+    private var fadeJob: Job? = null
+
+    /**
+     * Each output device remembers its own media volume, so connecting headphones can suddenly bring back a loud level.
+     * While DHVON has something loaded: cap the system media volume (default 40 %) and fade the sound in over ~1.2 s.
+     * If playback is paused (the usual unplug → re-plug → play case) it is armed and applied the moment play is pressed.
+     */
+    private fun onHeadphonesConnected() {
+        val p = boundPlayer ?: return
+        if (p.mediaItemCount == 0) return                 // DHVON isn't in use — never touch the volume of other apps
+        scope.launch {
+            if (settings.get(Keys.SAFE_HP_VOLUME) == false) return@launch
+            if (p.playWhenReady) applySafeVolume() else pendingSafeVolume = true
+        }
+    }
+
+    private fun applySafeVolume() {
+        pendingSafeVolume = false
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val cap = (max * SAFE_VOLUME_FRACTION).roundToInt().coerceIn(1, max)
+        if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) > cap) {
+            runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, cap, AudioManager.FLAG_SHOW_UI) }
+        }
+        fadeIn()
+    }
+
+    private fun fadeIn() {
+        val p = boundPlayer ?: return
+        fadeJob?.cancel()
+        fadeJob = scope.launch {
+            val steps = 12
+            for (i in 0 until steps) { p.volume = i / steps.toFloat(); delay(100) }
+            p.volume = 1f
+        }
+    }
+
     // ------------------------------------------------------------------ persistence (global settings only)
 
     private fun scheduleSave() {
@@ -487,6 +540,8 @@ class AudioEffectsController @Inject constructor(
 
     private companion object {
         const val MBC_BANDS = 3
+        /** Headphone safety: media volume is capped to this share of the maximum when headphones connect. */
+        const val SAFE_VOLUME_FRACTION = 0.4f
         val MBC_CUTOFFS = floatArrayOf(250f, 4000f, 20000f)
         val MBC_RATIOS = floatArrayOf(2.2f, 1.8f, 2.0f)
         val MBC_THRESHOLDS = floatArrayOf(-18f, -20f, -16f)

@@ -43,6 +43,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -97,7 +98,13 @@ interface PlayerHost {
     fun finishPlayer()
 }
 
-private enum class HudKind { NONE, BRIGHTNESS, VOLUME, SEEK, ZOOM }
+private enum class HudKind { NONE, BRIGHTNESS, DIM, VOLUME, SEEK, ZOOM }
+
+/** The panel's lowest real brightness (the window can't go to exactly 0) — shown as "0 %". */
+private const val BRIGHTNESS_MIN = 0.01f
+/** Strongest "extra dim" overlay: 85 % black, so the screen never goes fully unreadable. */
+private const val MAX_EXTRA_DIM = 0.85f
+private val DimBlue = Color(0xFF3B82F6)
 
 /** One handler per recomposition; the gesture detector always reads the latest through rememberUpdatedState. */
 /** Strips along each screen edge where touches are ignored, so Android's back / home / notification gestures never move the video. */
@@ -188,6 +195,9 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     val vlcPos by vm.vlcPosition.collectAsStateWithLifecycle()
     val vlcDur by vm.vlcDuration.collectAsStateWithLifecycle()
     val vlc = remember { LibVlcHandle() }
+    val dsp by vm.effects.state.collectAsStateWithLifecycle()
+    val extraDim by vm.extraDim.collectAsStateWithLifecycle()
+    val brightnessEpoch by vm.brightnessEpoch.collectAsStateWithLifecycle()
     val position = if (fb.active) vlcPos else exoPosition
     val playing = if (fb.active) vlcPlaying else ui.isPlaying
     val durationMs = if (fb.active && vlcDur > 0) vlcDur else ui.durationMs
@@ -199,10 +209,11 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     var lockHint by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var playlistOpen by remember { mutableStateOf(false) }
-    var aspect by remember { mutableStateOf(AspectMode.FIT) }
-    var zoom by remember { mutableFloatStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
-    var brightness by remember { mutableFloatStateOf(host.currentBrightness()) }
+    // Every video opens in Crop / Fill; your choice sticks while you move through the queue and resets on the next open.
+    var aspect by remember(brightnessEpoch) { mutableStateOf(AspectMode.FILL) }
+    var zoom by remember(brightnessEpoch) { mutableFloatStateOf(1f) }
+    var pan by remember(brightnessEpoch) { mutableStateOf(Offset.Zero) }
+    var brightness by remember(brightnessEpoch) { mutableFloatStateOf(host.currentBrightness()) }
     var volume by remember { mutableFloatStateOf(vm.currentVolumePercent()) }
     var hud by remember { mutableStateOf(HudKind.NONE) }
     var hudStamp by remember { mutableIntStateOf(0) }
@@ -331,11 +342,32 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                 },
                 onSeekEnd = { if (scrubbing) { finishScrub(scrubTarget); scrubbing = false; hudStamp++ } },
                 onBrightness = { d ->
-                    if (settings.gestureBrightness) brightness = (brightness + d * 1.2f * settings.brightnessSensitivity).coerceIn(0.01f, 1f)
-                    if (settings.gestureBrightness) { host.setBrightness(brightness); hud = HudKind.BRIGHTNESS; hudStamp++ }
+                    if (settings.gestureBrightness) {
+                        // One continuous axis: swiping down lowers the real brightness to its minimum and *stays there*; going on
+                        // swiping then deepens the "extra dim" overlay. Swiping up undoes the dim first, then raises brightness.
+                        val step = d * 1.2f * settings.brightnessSensitivity
+                        var b = brightness
+                        var dim = vm.extraDim.value
+                        if (step > 0f) {
+                            val undo = min(dim, step)
+                            dim -= undo
+                            b += step - undo
+                        } else if (step < 0f) {
+                            val use = min(b - BRIGHTNESS_MIN, -step)
+                            b -= use
+                            dim += -step - use
+                        }
+                        brightness = b.coerceIn(BRIGHTNESS_MIN, 1f)
+                        vm.setExtraDim(dim)
+                        host.setBrightness(brightness)
+                        hud = if (vm.extraDim.value > 0f) HudKind.DIM else HudKind.BRIGHTNESS
+                        hudStamp++
+                    }
                 },
                 onVolume = { d ->
                     if (settings.gestureVolume) {
+                        // The system (or the headphone safety cap) may have changed the volume since the last swipe.
+                        if (hud != HudKind.VOLUME) volume = vm.currentVolumePercent()
                         volume = (volume + d * 150f * settings.volumeSensitivity).coerceIn(0f, 150f)
                         vm.setVolumePercent(volume); hud = HudKind.VOLUME; hudStamp++
                     }
@@ -393,6 +425,9 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             modifier = Modifier.fillMaxSize(),
         )
 
+        // 2b — extra dim: a black layer over video + subtitles for when the panel's lowest brightness is still too bright (touch-transparent)
+        if (extraDim > 0.001f && !inPip) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = extraDim * MAX_EXTRA_DIM)))
+
         // 3 — gestures (above video, below controls so buttons still win hit-testing)
         if (!inPip) {
             if (locked) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { lockHint = true } })
@@ -403,7 +438,11 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             // 4 — HUDs
             if (skipSide != 0) SkipHud(skipSide, skipTotal, Modifier.align(if (skipSide < 0) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = 56.dp))
             when (hud) {
-                HudKind.BRIGHTNESS -> LevelHud(Icons.Rounded.BrightnessMedium, brightness, "${(brightness * 100).roundToInt()}%", Modifier.align(Alignment.Center))
+                HudKind.BRIGHTNESS -> {
+                    val pct = ((brightness - BRIGHTNESS_MIN) / (1f - BRIGHTNESS_MIN)).coerceIn(0f, 1f)
+                    LevelHud(Icons.Rounded.BrightnessMedium, pct, "${(pct * 100).roundToInt()}%", Modifier.align(Alignment.Center))
+                }
+                HudKind.DIM -> LevelHud(Icons.Rounded.Bedtime, extraDim, "Dim ${(extraDim * 100).roundToInt()}%", Modifier.align(Alignment.Center), barColor = DimBlue)
                 HudKind.VOLUME -> LevelHud(if (volume <= 0f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, volume / 150f, "${volume.roundToInt()}%", Modifier.align(Alignment.Center))
                 HudKind.SEEK -> SeekHud(scrubTarget, scrubTarget - scrubBase, Modifier.align(Alignment.Center))
                 HudKind.ZOOM -> Pill("Zoom ${(zoom * 100).roundToInt()}%", Modifier.align(Alignment.Center))
@@ -412,22 +451,56 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             if (ui.buffering && !fb.active) CircularProgressIndicator(Modifier.align(Alignment.Center).size(44.dp), color = Color.White, strokeWidth = 3.dp)
 
             // 5 — controls
-            AnimatedVisibility(controlsVisible && !locked, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(controlsVisible && !locked, Modifier.fillMaxSize().alpha(1f - 0.5f * extraDim), enter = fadeIn(), exit = fadeOut()) {
                 Box(Modifier.fillMaxSize()) {
                     val topActions: @Composable RowScope.() -> Unit = {
+                        val btn = Modifier.size(if (landscape) 40.dp else 36.dp)   // nine buttons must fit a 360 dp phone
                         IconButton({
                             poke()
                             val on = !settings.backgroundPlay
                             vm.setBackgroundPlay(on)
                             Toast.makeText(ctx, if (on) "Background play on — sound keeps playing when you leave" else "Background play off", Toast.LENGTH_SHORT).show()
-                        }) { Icon(Icons.Rounded.Headphones, "Background play", tint = if (settings.backgroundPlay) p.accentSecondary else Color.White) }
-                        IconButton({ vm.setAudioMode(true) }) { Icon(Icons.Rounded.GraphicEq, "Audio mode", tint = Color.White) }
-                        IconButton({ poke(); host.enterPip() }) { Icon(Icons.Rounded.PictureInPictureAlt, "Pop-up window", tint = Color.White) }
-                        IconButton({ poke(); playlistOpen = true }) { Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, "Playlist", tint = Color.White) }
-                        IconButton({ poke(); vm.toggleSubtitles() }) {
+                        }, btn) { Icon(Icons.Rounded.Headphones, "Background play", tint = if (settings.backgroundPlay) p.accentSecondary else Color.White) }
+                        IconButton({
+                            poke()
+                            when {
+                                fb.active -> Toast.makeText(ctx, "Lo-Fi needs the standard player — not available with the VLC engine", Toast.LENGTH_SHORT).show()
+                                else -> {
+                                    val on = !dsp.lofiEnabled
+                                    vm.effects.setLofiMode(on)
+                                    Toast.makeText(ctx, if (on) "Lo-Fi on — slowed 0.88× with reverb" else "Lo-Fi off", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, btn) { Icon(Icons.Rounded.Album, "Lo-Fi mode", tint = if (dsp.lofiEnabled) p.accentSecondary else Color.White) }
+                        IconButton({
+                            poke()
+                            val active = dsp.enabled && dsp.dynamicAdaptiveEnabled
+                            when {
+                                fb.active -> Toast.makeText(ctx, "Auto EQ needs the standard player — not available with the VLC engine", Toast.LENGTH_SHORT).show()
+                                !dsp.dspSupported -> Toast.makeText(ctx, "Auto EQ needs Android 9 or newer", Toast.LENGTH_SHORT).show()
+                                else -> {
+                                    if (!active && !dsp.enabled) vm.effects.setEnabled(true)   // turning Auto EQ on also wakes the EQ chain
+                                    vm.effects.setDynamicAdaptive(!active)
+                                    Toast.makeText(ctx, if (!active) "Auto EQ on — adapts to the sound live" else "Auto EQ off", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, btn) { Icon(Icons.Rounded.AutoAwesome, "Auto EQ", tint = if (dsp.enabled && dsp.dynamicAdaptiveEnabled && dsp.dspSupported) p.accentSecondary else Color.White) }
+                        IconButton({
+                            poke()
+                            // Fit → Crop/Fill → Stretch → 16:9 → 4:3 → 100 %, same modes as Quick settings → Aspect Ratio
+                            val modes = AspectMode.entries
+                            val next = modes[(modes.indexOf(aspect) + 1) % modes.size]
+                            aspect = next
+                            if (next != AspectMode.ORIGINAL) { zoom = 1f; pan = Offset.Zero }
+                            Toast.makeText(ctx, "Aspect ratio: ${next.label}", Toast.LENGTH_SHORT).show()
+                        }, btn) { Icon(Icons.Rounded.AspectRatio, "Aspect ratio", tint = Color.White) }
+                        IconButton({ vm.setAudioMode(true) }, btn) { Icon(Icons.Rounded.GraphicEq, "Audio mode", tint = Color.White) }
+                        IconButton({ poke(); host.enterPip() }, btn) { Icon(Icons.Rounded.PictureInPictureAlt, "Pop-up window", tint = Color.White) }
+                        IconButton({ poke(); playlistOpen = true }, btn) { Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, "Playlist", tint = Color.White) }
+                        IconButton({ poke(); vm.toggleSubtitles() }, btn) {
                             Icon(if (ui.subtitlesEnabled) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionDisabled, "Subtitles", tint = if (ui.subtitlesEnabled) p.accentSecondary else Color.White)
                         }
-                        IconButton({ menuOpen = !menuOpen }) { Icon(Icons.Rounded.Settings, "Settings", tint = Color.White) }
+                        IconButton({ menuOpen = !menuOpen }, btn) { Icon(Icons.Rounded.Settings, "Settings", tint = Color.White) }
                     }
                     Column(
                         Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
@@ -595,14 +668,14 @@ private fun SkipHud(side: Int, total: Int, modifier: Modifier) {
 
 /** Centered level indicator for brightness (0–100 %) and volume (0–150 %): icon · bar · percentage. */
 @Composable
-private fun LevelHud(icon: ImageVector, fraction: Float, label: String, modifier: Modifier) {
+private fun LevelHud(icon: ImageVector, fraction: Float, label: String, modifier: Modifier, barColor: Color? = null) {
     Row(
         modifier.clip(RoundedCornerShape(28.dp)).background(Color.Black.copy(alpha = 0.64f)).padding(horizontal = 22.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp))
         Box(Modifier.width(170.dp).height(8.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f))) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(LocalDhvon.current.accent))
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(barColor ?: LocalDhvon.current.accent))
         }
         Text(label, color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.widthIn(min = 46.dp))
     }

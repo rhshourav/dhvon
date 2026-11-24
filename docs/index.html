@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>DHVON — Every Sound. Every Frame.</title>
-<meta name="description" content="DHVON is an offline-first, ad-free video and audio player for Android. Pro gestures, FFmpeg decoding, and a calm Now Playing screen.">
+<meta name="description" content="DHVON is an offline-first, ad-free video and audio player for Android. Pro gestures, FFmpeg and VLC playback, a studio-grade equalizer and a calm Now Playing screen.">
 <meta name="author" content="rhshourav">
 <meta name="theme-color" content="#08090D">
 <meta name="format-detection" content="telephone=no">
@@ -222,8 +222,6 @@ pre{font-size:12px}
 .bp{position:absolute;top:14%;left:50%;translate:-50% -10px;display:flex;align-items:center;gap:.5em;padding:.5em 1em;border-radius:99px;background:#000b;color:#fff;font-size:clamp(11px,calc(100cqw/50),15px);font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .35s var(--e),translate .35s var(--e)}
 .bp.on{opacity:1;translate:-50% 0}.bp svg{width:1.2em;height:1.2em}
 @media(max-width:780px){.mini{display:none}}
-.nw{display:none}.v3 .cs{display:none}.v3 .nw{display:inline}
-.bd3{display:inline-block;margin-left:10px;padding:3px 10px;border-radius:99px;background:var(--el);color:var(--cy);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;vertical-align:middle;white-space:nowrap}.v3 .bd3{display:none}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition-duration:.01ms!important}html{scroll-behavior:auto}.r{opacity:1;transform:none}}
 </style>
 <noscript><style>.r{opacity:1;transform:none}.st:first-child{opacity:1}.ph img:first-child{opacity:1}</style></noscript>
@@ -234,7 +232,7 @@ pre{font-size:12px}
 
 <header id="hero"><div class="wave"></div>
 <div class="hc">
-<a class="new" href="#new"><b><span class="cs">SOON</span><span class="nw">NEW</span></b><span>VLC rescue, studio EQ and more <span class="cs">coming in 3.0</span><span class="nw">in 3.0</span></span><i>›</i></a>
+<a class="new" href="#new"><b>NEW</b><span>VLC rescue, studio EQ and more in 3.0.1</span><i>›</i></a>
 <div class="bars" aria-hidden="true"><i style="--h:17;--d:5"></i><i style="--h:36;--d:3"></i><i style="--h:64;--d:1"></i><i style="--h:76;--d:0"></i><i style="--h:66;--d:2"></i><i style="--h:56;--d:4"></i><i style="--h:36;--d:6"></i><i style="--h:17;--d:7"></i></div>
 <h1>Every Sound.<br><span class="g">Every Frame.</span></h1>
 <p class="sub">An offline-first, ad-free video and music player for Android. The gestures of a pro player, the calm of a Now Playing screen.</p>
@@ -249,17 +247,17 @@ pre{font-size:12px}
 <div class="c r" style="--i:2"><h3>Scoped storage</h3><p>Reads media through MediaStore and the system picker. No all-files access requested.</p></div>
 </div></div></section>
 
-<section id="new"><div class="w"><span class="k r"><span class="cs">Coming in 3.0</span><span class="nw">New in 3.0</span></span><h2 class="r">Three-point-oh, <span class="g">in plain words.</span></h2><p class="r"><span class="cs">On the way: rescue playback, a studio-grade equalizer and a handful of quiet details.</span><span class="nw">Rescue playback, a studio-grade equalizer and a handful of quiet details.</span></p>
+<section id="new"><div class="w"><span class="k r">New in 3.0.1</span><h2 class="r">What’s new, <span class="g">in plain words.</span></h2><p class="r">Rescue playback, a studio-grade equalizer and a handful of quiet details.</p>
 <div class="nl">
-<a class="r" style="--i:0" href="#engine"><b>VLC rescue</b><span>No decoder for DivX, Xvid or MPEG-2? DHVON hands the file to VLC on its own.</span><i><span class="cs">Preview</span><span class="nw">Try it</span> ›</i></a>
-<a class="r" style="--i:1" href="#music"><b>Studio equalizer</b><span>Harman and Sub-Bass signatures, a live analyzer and a headroom guard that stops clipping.</span><i><span class="cs">Preview</span><span class="nw">Try it</span> ›</i></a>
-<a class="r" style="--i:2" href="#player"><b>Exact scrubbing</b><span>A snappy preview while you drag, then one exact seek when you let go.</span><i><span class="cs">Preview</span><span class="nw">Try it</span> ›</i></a>
-<a class="r" style="--i:3" href="#player"><b>Bluetooth pill</b><span>A short, quiet confirmation when your audio switches to Bluetooth headphones.</span><i><span class="cs">Preview</span><span class="nw">Try it</span> ›</i></a>
+<a class="r" style="--i:0" href="#engine"><b>VLC rescue</b><span>No decoder for DivX, Xvid or MPEG-2? DHVON hands the file to VLC on its own.</span><i>Try it ›</i></a>
+<a class="r" style="--i:1" href="#music"><b>Studio equalizer</b><span>Harman and Sub-Bass signatures, a live analyzer and a headroom guard that stops clipping.</span><i>Try it ›</i></a>
+<a class="r" style="--i:2" href="#player"><b>Exact scrubbing</b><span>A snappy preview while you drag, then one exact seek when you let go.</span><i>Try it ›</i></a>
+<a class="r" style="--i:3" href="#player"><b>Bluetooth pill</b><span>A short, quiet confirmation when your audio switches to Bluetooth headphones.</span><i>Try it ›</i></a>
 <a class="r" style="--i:4" href="#engine"><b>Open with DHVON</b><span>DHVON appears in “Open with” for many more audio and video formats, and audio files open in the player’s audio mode.</span><i>Formats ›</i></a>
 </div>
 <p class="hint r" style="text-align:left;margin-top:22px">Heads-up: Android 11 and newer hides non-media files (.dts, .ac3 …) from apps without all-files access, which DHVON never asks for. Use <b>Add folder</b> and DHVON’s own scanner finds every format.</p>
 <div class="c r" style="margin-top:28px"><h3>A smarter sleep timer</h3><p>Set it from the player’s quick settings. Stop after a set time, at the end of the track, or at the end of this video, and optionally close DHVON for good.</p><div class="tgl"><button id="sl" role="switch" aria-checked="false" aria-label="Close DHVON when the timer fires"><i></i></button><span>Close DHVON when it fires</span></div><p class="fn" id="slt">Playback stops. DHVON stays open.</p></div>
-<div class="cta cs" style="justify-content:flex-start;margin-top:28px"><a class="b" href="https://github.com/rhshourav/dhvon" rel="noopener">Watch the repo for 3.0 ›</a></div>
+<div class="cta" style="justify-content:flex-start;margin-top:28px"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Get<span class="vt">3.0.1</span></a></div>
 </div></section>
 
 <div id="flow"><div class="s0">
@@ -275,20 +273,20 @@ pre{font-size:12px}
 <section id="player"><div class="w"><span class="k r">Gestures</span><h2 class="r">Your thumbs <span class="g">know the way.</span></h2><p class="r">Try it. Double-tap the sides, drag the edges, slide across the middle.</p>
 <div class="vp r"><div class="sc" id="s-vid"></div><div id="dim"></div><div id="gz"><i class="z" style="left:0"></i><i class="z" style="right:0"></i></div><div class="sk" id="sk"></div><div class="sv" id="sv"></div><div class="hud" id="hud"><span id="hl">VOL</span><s><u></u></s><b id="hv">70</b></div><div class="bp" id="bp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"/></svg>Audio switched to Bluetooth</div></div>
 <p class="hint r">Left edge: brightness · Right edge: volume · Middle: double-tap or slide to seek</p>
-<div class="ch r" style="justify-content:center;margin-top:18px"><button id="bt"><span class="cs">Preview: </span>Connect Bluetooth headphones</button></div>
+<div class="ch r" style="justify-content:center;margin-top:18px"><button id="bt">Connect Bluetooth headphones</button></div>
 <div class="gr">
 <div class="c r" style="--i:0"><h3>Double-tap</h3><p>±10 s with a running counter. Tap faster, skip further.</p></div>
-<div class="c r" style="--i:1"><h3>Slide to seek</h3><p>A live timestamp and delta, with keyframe snapping for smooth .mkv and .ts scrubbing.</p></div>
+<div class="c r" style="--i:1"><h3>Slide to seek</h3><p>A live timestamp and delta. The preview snaps to keyframes while you drag, so long .mkv and .ts files stay instant. Let go and one exact seek lands where you stopped. Every other seek follows Settings → Seek precision.</p></div>
 <div class="c r" style="--i:2"><h3>Edges</h3><p>Brightness 0–100%. Volume up to 150%. Pinch to Fit, Fill or Stretch.</p></div>
 <div class="c r" style="--i:3"><h3>Screen lock</h3><p>One tap ignores every touch, so pockets and kids can’t interrupt.</p></div>
-<div class="c r" style="--i:4"><h3>Bluetooth, politely<span class="bd3">Coming in 3.0</span></h3><p>Connect headphones mid-video and a small pill confirms the switch for a few seconds, once. Devices that were already connected stay quiet.</p></div>
+<div class="c r" style="--i:4"><h3>Bluetooth, politely</h3><p>Connect headphones mid-video and a small pill confirms the switch for a few seconds, once. Devices that were already connected stay quiet.</p></div>
 </div></div></section>
 
 <section id="music"><div class="w mu">
 <div class="r"><div class="ph" id="p-mu"></div></div>
 <div><span class="k r">Music</span><h2 class="r">See the song, <span class="g">not just a bar.</span></h2><p class="r">The waveform is the scrubber. Drag it and the sound is right under your finger.</p>
 <div class="c r" style="margin-top:28px"><div id="wf" aria-label="Waveform scrubber"></div><div class="tm"><span id="t1">01:12</span><button class="pp" id="pp" aria-label="Play or pause"><svg viewBox="0 0 24 24"><path class="a" d="M8 5v14l11-7z"/><path class="b2" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button><span>04:20</span></div></div>
-<div class="c r" style="margin-top:14px"><div class="eqh"><b>Studio equalizer<span class="bd3">Coming in 3.0</span></b><span id="hr"></span></div><div class="eq" id="eq"></div><div class="ch" id="pr" style="margin:0"></div><div class="ch" id="tg" style="margin:10px 0 0"><button class="on" data-q="ad" aria-pressed="true">Adaptive EQ</button><button data-q="lo" aria-pressed="false">Lo-Fi</button></div><p class="fn">Boost a band and DHVON lowers the input gain first, so nothing can clip. Lo-Fi adds reverb at 0.88× speed; switch it off and your speed returns.</p></div>
+<div class="c r" style="margin-top:14px"><div class="eqh"><b>Studio equalizer</b><span id="hr"></span></div><div class="eq" id="eq"></div><div class="ch" id="pr" style="margin:0"></div><div class="ch" id="tg" style="margin:10px 0 0"><button class="on" data-q="ad" aria-pressed="true">Adaptive EQ</button><button data-q="lo" aria-pressed="false">Lo-Fi</button></div><p class="fn">Boost a band and DHVON lowers the input gain first, so nothing can clip. Lo-Fi adds reverb at 0.88× speed; switch it off and your speed returns.</p></div>
 </div></div></section>
 
 <section id="lib"><div class="w lb">
@@ -297,10 +295,10 @@ pre{font-size:12px}
 <div class="shots r"><div class="ph px1" id="p-fo"></div><div class="ph px2" id="p-mv"></div></div>
 </div></section>
 
-<section id="engine"><div class="w"><span class="k r">Engine</span><h2 class="r">If it exists, <span class="g">it plays.</span></h2><p class="r">Media3 with FFmpeg extensions. Pick how it decodes, per file and per moment.</p>
+<section id="engine"><div class="w"><span class="k r">Engine</span><h2 class="r">If it exists, <span class="g">it plays.</span></h2><p class="r">Media3 with FFmpeg extensions. Pick how it decodes, per file and per moment. If nothing can decode a file, VLC steps in.</p>
 <div class="c r" style="margin-top:36px"><div class="seg"><button class="on" data-d="HW">HW</button><button data-d="HWP">HW+</button><button data-d="SW">SW</button></div><p id="dd">Hardware decoding through MediaCodec: the coolest, longest-lasting way to play.</p></div>
-<div class="c r" style="margin-top:14px"><span class="k" style="margin-bottom:12px">Auto-rescue<span class="bd3">Coming in 3.0</span></span><div class="ch" style="margin:0 0 18px"><button class="on" data-f="mp4">H.264 .mp4</button><button data-f="avi">DivX / Xvid .avi</button><button data-f="ts">MPEG-2 .ts</button></div><div class="pipe"><span class="on" id="p1">Media3</span><i></i><span id="p2">VLC</span></div><p id="rtx">Plays in Media3 with hardware decoding. VLC never wakes up.</p><p class="fn">VLC steps in only when no decoder exists at all. Seek, double-tap, speed, pinch-zoom and Picture-in-Picture keep working, and a VLC badge shows in the top bar. VLC plays its own audio, so the equalizer is bypassed, and embedded subtitles aren’t shown (external .srt, .ass and .vtt still load).</p></div>
-<div class="ch" id="fm"></div><p class="hint r" style="text-align:left;margin-top:26px">Built on AndroidX Media3<span class="nw">, FFmpeg and libVLC.</span><span class="cs"> and FFmpeg. libVLC joins in 3.0.</span></p></div></section>
+<div class="c r" style="margin-top:14px"><span class="k" style="margin-bottom:12px">Auto-rescue</span><div class="ch" style="margin:0 0 18px"><button class="on" data-f="mp4">H.264 .mp4</button><button data-f="avi">DivX / Xvid .avi</button><button data-f="ts">MPEG-2 .ts</button></div><div class="pipe"><span class="on" id="p1">Media3</span><i></i><span id="p2">VLC</span></div><p id="rtx">Plays in Media3 with hardware decoding. VLC never wakes up.</p><p class="fn">VLC steps in only when no decoder exists at all. Seek, double-tap, speed, pinch-zoom and Picture-in-Picture keep working, and a VLC badge shows in the top bar. VLC plays its own audio, so the equalizer is bypassed, and embedded subtitles aren’t shown (external .srt, .ass and .vtt still load).</p></div>
+<div class="ch" id="fm"></div><p class="hint r" style="text-align:left;margin-top:26px">Built on AndroidX Media3, FFmpeg and libVLC.</p></div></section>
 
 <section id="themes"><div class="w"><span class="k r">Themes</span><h2 class="r">Make it <span class="g">yours.</span></h2><p class="r">Try it right here. This page wears the same four themes as the app.</p>
 <div class="ch r" id="th"><button class="on" data-th="obsidian">Obsidian</button><button data-th="amoled">AMOLED</button><button data-th="light">Light</button><button data-th="material">Material You</button></div></div></section>
@@ -315,7 +313,7 @@ pre{font-size:12px}
 <div class="c r" style="--i:5"><h3>Reduced motion</h3><p>If your OS asks for calm, every animation here yields.</p></div>
 </div></div></section>
 
-<section id="dl"><div class="w"><div class="dl r"><span class="k">Download</span><h2>Get <span class="g">DHVON.</span></h2><p id="ver">Checking the latest release…</p>
+<section id="dl"><div class="w"><div class="dl r"><span class="k">Download</span><h2>Get <span class="g">DHVON.</span></h2><p id="ver">v3.0.1 · latest release</p>
 <div class="cta"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Download APK</a><a class="b" href="https://github.com/rhshourav/dhvon" rel="noopener">Source code</a></div>
 <pre>git clone https://github.com/rhshourav/dhvon
 cd dhvon &amp;&amp; ./gradlew assembleRelease</pre><p id="note" style="margin-top:22px;font-size:14px"></p></div></div></section>
@@ -435,10 +433,9 @@ if(!rel||!rel.tag_name)try{rel=await J('https://api.github.com/repos/'+R+'/relea
 try{rp=await J('repo.json')}catch(e){}
 if(!rp||rp.stars==null)try{rp={stars:(await J('https://api.github.com/repos/'+R)).stargazers_count}}catch(e){}
 if(rp&&rp.stars!=null)$('#stars').textContent='★ '+Intl.NumberFormat('en',{notation:'compact'}).format(rp.stars);
-if(rel&&rel.tag_name){if(+(rel.tag_name.match(/\d+/)||[0])[0]>=3)rs.classList.add("v3");const a=(rel.assets||[]).find(a=>/\.apk$/i.test(a.name));
+if(rel&&rel.tag_name){const a=(rel.assets||[]).find(a=>/\.apk$/i.test(a.name));
 $('#ver').textContent=rel.tag_name+' · '+new Date(rel.published_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})+(a?' · '+(a.size/1048576).toFixed(1)+' MB':'');
-if(a)$$('.apk').forEach(x=>x.href=a.browser_download_url)}
-else $('#ver').textContent='Build it from source, or watch the repo for the first release.'})();
+if(a)$$('.apk').forEach(x=>x.href=a.browser_download_url);$$('.vt').forEach(x=>x.textContent=rel.tag_name.replace(/^v/i,''))}})();
 if(/Android/i.test(navigator.userAgent))$$('.apk').forEach(x=>x.textContent='Download for Android');
 else $('#note').textContent='DHVON is an Android app. Open this page on your phone, or grab the APK here.';
 </script>

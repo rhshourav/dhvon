@@ -77,6 +77,7 @@ import com.rhshourav.dhvon.R
 import com.rhshourav.dhvon.data.settings.ProgressStyle
 import com.rhshourav.dhvon.domain.formatDuration
 import com.rhshourav.dhvon.ui.components.DhvonSeekBar
+import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
 import com.rhshourav.dhvon.ui.components.rememberPositionMs
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 import kotlinx.coroutines.Job
@@ -261,17 +262,20 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
     }
 
     // The Bluetooth pill sits below the top bar while the controls are showing, and tucks up to the edge when they hide.
+    // Same inset on opposite edges (see rememberSymmetricInsets): the camera side no longer gets a gap the other side lacks.
+    val safeInsets = rememberSymmetricInsets()
+    val safeTop = safeInsets.calculateTopPadding()
     val btTopTarget = when {
-        audioMode -> 60.dp
-        controlsVisible && !locked -> if (landscape) 64.dp else 108.dp
-        else -> 10.dp
+        audioMode -> safeTop + 60.dp
+        controlsVisible && !locked -> safeTop + if (landscape) 56.dp else 100.dp
+        else -> safeTop + 10.dp
     }
     val btTop by animateDpAsState(btTopTarget, label = "bt_top")
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         if (audioMode && !inPip) {
             AudioModeUi(vm, player, ui, pb, settings, peaks, onShowVideo = { vm.setAudioMode(false) }, onClose = { host.finishPlayer() })
-            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().displayCutoutPadding().padding(top = btTop))
+            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = btTop))
             return@BoxWithConstraints
         }
         val widthPx = constraints.maxWidth.toFloat()
@@ -401,6 +405,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     onError = vm::onVlcError,
                     onVideoSize = { w, h -> host.lockOrientationFor(w, h) },
                     onAudioFocusLost = { vm.setVlcPlaying(false) },
+                    preferEnglishAudio = settings.preferEnglishAudio,
                 )
             }
         } else {
@@ -504,7 +509,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     }
                     Column(
                         Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
-                            .displayCutoutPadding().padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(safeInsets).padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton({ host.finishPlayer() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
@@ -516,7 +521,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     }
                     Column(
                         Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-                            .displayCutoutPadding().navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 0.dp, top = 12.dp),
+                            .padding(safeInsets).padding(horizontal = 12.dp).padding(top = 12.dp),
                     ) {
                         val dur = max(durationMs, 1L)
                         val shown = if (scrubbing) scrubTarget else position
@@ -567,7 +572,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                     ui, settings, aspect, onAspect = { aspect = it; if (it != AspectMode.ORIGINAL) { zoom = 1f; pan = Offset.Zero } }, vm = vm,
                     onLoadSubtitle = { subtitlePicker.launch(arrayOf("*/*")) },
                     onPip = { menuOpen = false; host.enterPip() },
-                    modifier = Modifier.align(Alignment.TopEnd).displayCutoutPadding().padding(top = 60.dp, end = 12.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(safeInsets).padding(top = 52.dp, end = 12.dp),
                 )
             }
 
@@ -591,7 +596,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             // 7 — screen lock pill
             if (locked && lockHint) {
                 Row(
-                    Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(24.dp).clip(CircleShape).background(p.elevated.copy(alpha = 0.95f))
+                    Modifier.align(Alignment.BottomStart).padding(safeInsets).padding(24.dp).clip(CircleShape).background(p.elevated.copy(alpha = 0.95f))
                         .clickable { locked = false; lockHint = false; controlsVisible = true }.padding(horizontal = 18.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -601,7 +606,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             }
 
             // 7b — "Switched to Bluetooth" pill (never intercepts touches)
-            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().displayCutoutPadding().padding(top = btTop))
+            BluetoothSwitchBanner(vm.effects.bluetoothConnectedEvent, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = btTop))
 
             // error card
             ui.error?.let { msg ->

@@ -22,11 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.rhshourav.dhvon.domain.MediaFile
 import com.rhshourav.dhvon.domain.formatDuration
 import com.rhshourav.dhvon.player.QueueEntry
 import com.rhshourav.dhvon.ui.components.MediaThumb
+import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
 /**
@@ -44,12 +46,14 @@ fun VideoPlaylistPanel(
 ) {
     val p = LocalDhvon.current
     val listState = rememberLazyListState()
+    val safe = rememberSymmetricInsets()
+    val side = safe.calculateLeftPadding(LayoutDirection.Ltr)   // same inset left and right (no camera-side-only gap); the panel sits flush with the top of its sheet
     LaunchedEffect(current, entries.size) {
         if (entries.isNotEmpty()) listState.scrollToItem((current - 1).coerceIn(0, entries.lastIndex))
     }
     Column(
         modifier.clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(p.card.copy(alpha = 0.97f))
-            .displayCutoutPadding().navigationBarsPadding(),
+            .padding(start = side, end = side, bottom = safe.calculateBottomPadding()),
     ) {
         Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp).size(width = 38.dp, height = 4.dp).clip(CircleShape).background(p.textSecondary.copy(alpha = 0.4f)))
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {

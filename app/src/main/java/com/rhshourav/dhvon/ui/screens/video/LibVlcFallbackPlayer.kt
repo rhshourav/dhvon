@@ -20,6 +20,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.rhshourav.dhvon.data.media.AudioTrackPicker
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -110,6 +111,7 @@ fun LibVlcFallbackPlayer(
     onError: (String) -> Unit = {},
     onVideoSize: (width: Int, height: Int) -> Unit = { _, _ -> },
     onAudioFocusLost: () -> Unit = {},
+    preferEnglishAudio: Boolean = true,
 ) {
     val context = LocalContext.current
     val session = remember(uri) { VlcSession.open(context, uri, startPositionMs) }
@@ -120,7 +122,7 @@ fun LibVlcFallbackPlayer(
     }
     VlcSurface(
         session, isPlaying, playbackSpeed, volumePercent, scaleType, handle, modifier,
-        onTimeChanged, onLengthChanged, onEnded, onError, onVideoSize, onAudioFocusLost,
+        onTimeChanged, onLengthChanged, onEnded, onError, onVideoSize, onAudioFocusLost, preferEnglishAudio,
     )
 }
 
@@ -139,6 +141,7 @@ private fun VlcSurface(
     onError: (String) -> Unit,
     onVideoSize: (Int, Int) -> Unit,
     onAudioFocusLost: () -> Unit,
+    preferEnglishAudio: Boolean,
 ) {
     val player = session.player
     val timeCb by rememberUpdatedState(onTimeChanged)
@@ -147,14 +150,26 @@ private fun VlcSurface(
     val errorCb by rememberUpdatedState(onError)
     val sizeCb by rememberUpdatedState(onVideoSize)
     val speedNow by rememberUpdatedState(speed)
+    val englishNow by rememberUpdatedState(preferEnglishAudio)
     val main = remember { Handler(Looper.getMainLooper()) }
+
+    // English by default: VLC starts on the container's default track (often a dub) — pick the English one by its name instead.
+    fun pickEnglishAudio() {
+        if (!englishNow) return
+        val tracks = player.audioTracks ?: return
+        val candidates = tracks.filter { it.id >= 0 }.map { AudioTrackPicker.Candidate(key = it.id, label = it.name) }
+        if (candidates.size < 2) return
+        val best = AudioTrackPicker.pickEnglish(candidates) ?: return
+        if (player.audioTrack != best.key) player.setAudioTrack(best.key)
+    }
 
     DisposableEffect(session) {
         handle?.player = player
         player.setEventListener { e ->
             // LibVLC may call from its own thread; everything that touches UI state hops to the main thread.
             when (e.type) {
-                MediaPlayer.Event.Playing -> main.post { player.setRate(speedNow) }
+                MediaPlayer.Event.Playing -> main.post { player.setRate(speedNow); pickEnglishAudio() }
+                MediaPlayer.Event.ESAdded -> main.post { pickEnglishAudio() }
                 MediaPlayer.Event.TimeChanged -> { val t = e.timeChanged; main.post { timeCb(t) } }
                 MediaPlayer.Event.LengthChanged -> { val l = e.lengthChanged; main.post { lengthCb(l) } }
                 MediaPlayer.Event.EndReached -> main.post { endCb() }

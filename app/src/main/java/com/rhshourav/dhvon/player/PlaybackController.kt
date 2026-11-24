@@ -149,6 +149,7 @@ class PlaybackController @Inject constructor(
             }.getOrNull().orEmpty()
             if (files.isEmpty()) return@launch
             holder.setDecoderMode(prefs.decoderMode)
+            holder.setPreferredAudioLanguage(if (prefs.preferEnglishAudio) "en" else null)
             val p = holder.player
             p.setMediaItems(files.map { it.toMediaItem() }, index.coerceIn(files.indices), pos)
             p.playWhenReady = false
@@ -278,6 +279,7 @@ class PlaybackController @Inject constructor(
         val prefs = settings.settings.first()
         holder.setDecoderMode(prefs.decoderMode)   // rebuilds the player only if the mode actually changed
         holder.setSeekSnap(prefs.seekSnap)
+        holder.setPreferredAudioLanguage(if (prefs.preferEnglishAudio) "en" else null)
         val p = holder.player
         p.setMediaItems(files.map { it.toMediaItem() }, index, startMs)
         if (shuffle) p.shuffleFromCurrent()          // start item first, then every other item once — nothing is skipped

@@ -19,6 +19,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.MediaItem
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import com.rhshourav.dhvon.data.media.AudioTrackPicker
 import com.rhshourav.dhvon.data.media.SubtitleParser
 import com.rhshourav.dhvon.data.media.WaveformExtractor
 import com.rhshourav.dhvon.data.media.SubtitleTrackEngine
@@ -124,6 +125,52 @@ class VideoPlayerViewModel @Inject constructor(
     private val pending = ArrayDeque<Pair<Long, List<Cue>>>()
     private var embeddedCues: List<Cue> = emptyList()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    // ------------------------------------------------------------------ English audio by default
+
+    private class AudioEntry(val candidate: AudioTrackPicker.Candidate, val group: Tracks.Group, val index: Int, val selected: Boolean)
+
+    private var userPickedAudio = false
+    private var autoAudioKey: String? = null
+
+    /**
+     * With several audio tracks, switch to the English one — matched by tag, by name and forgiving of typos (see [AudioTrackPicker]).
+     * Decided once per file (re-decided if more tracks show up later, as in transport streams); leaves the player's choice alone when
+     * it is already English, when nothing looks English, or after you picked a track yourself.
+     */
+    private fun autoSelectEnglishAudio(tracks: Tracks) {
+        val p = attached ?: return
+        if (userPickedAudio || _fallback.value.active || !settings.value.preferEnglishAudio) return
+        val mediaId = p.currentMediaItem?.mediaId ?: return
+        val entries = ArrayList<AudioEntry>()
+        tracks.groups.forEachIndexed { gi, g ->
+            if (g.type != C.TRACK_TYPE_AUDIO) return@forEachIndexed
+            for (i in 0 until g.length) {
+                if (!g.isTrackSupported(i)) continue
+                val f = g.getTrackFormat(i)
+                val candidate = AudioTrackPicker.Candidate(
+                    key = gi * 1000 + i,
+                    language = f.language,
+                    label = f.label,
+                    channelCount = f.channelCount.coerceAtLeast(0),
+                    isDefault = (f.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0,
+                    flaggedAsCommentary = (f.roleFlags and (C.ROLE_FLAG_COMMENTARY or C.ROLE_FLAG_DESCRIBES_VIDEO)) != 0,
+                )
+                entries += AudioEntry(candidate, g, i, g.isTrackSelected(i))
+            }
+        }
+        if (entries.size < 2) return                        // nothing to choose between
+        val key = "$mediaId#${entries.size}"
+        if (autoAudioKey == key) return
+        autoAudioKey = key
+        val current = entries.firstOrNull { it.selected }
+        if (current != null && AudioTrackPicker.isEnglish(current.candidate)) return      // already English (e.g. via the language hint)
+        val best = AudioTrackPicker.pickEnglish(entries.map { it.candidate }) ?: return
+        val target = entries.first { it.candidate.key == best.key }
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .setOverrideForType(TrackSelectionOverride(target.group.mediaTrackGroup, target.index)).build()
+    }
 
     // ------------------------------------------------------------------ screen dimming (brightness gesture below the panel's minimum)
 
@@ -278,12 +325,13 @@ class VideoPlayerViewModel @Inject constructor(
     // ------------------------------------------------------------------ player events
 
     override fun onEvents(player: Player, events: Player.Events) = publish(player)
-    override fun onTracksChanged(tracks: Tracks) { refreshTracks(tracks); evaluateFallback(tracks) }
+    override fun onTracksChanged(tracks: Tracks) { refreshTracks(tracks); evaluateFallback(tracks); autoSelectEnglishAudio(tracks) }
     override fun onVideoSizeChanged(videoSize: VideoSize) { attached?.let { publish(it) } }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         externals.clear(); pending.clear(); embeddedCues = emptyList(); _cues.value = emptyList()
         holder.audioProcessor.delayMs = 0
+        userPickedAudio = false; autoAudioKey = null     // every file gets its own automatic audio pick
         _ui.update { it.copy(selectedExternal = null, externalSubs = emptyList(), subtitleOffsetMs = 0, audioDelayMs = 0, error = null) }
         if (_fallback.value.active) {
             // Next / previous / auto-advance while VLC was playing: ExoPlayer was parked paused, so start the new item.
@@ -370,6 +418,7 @@ class VideoPlayerViewModel @Inject constructor(
     fun selectAudio(o: TrackOption) {
         val p = attached ?: return
         val g = o.group ?: return
+        userPickedAudio = true          // a manual choice always wins over the automatic English pick
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
             .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, o.index)).build()

@@ -31,6 +31,7 @@ import com.rhshourav.dhvon.ui.components.DhvonSeekBar
 import com.rhshourav.dhvon.ui.components.MediaThumb
 import com.rhshourav.dhvon.ui.components.SilverIcon
 import com.rhshourav.dhvon.ui.components.rememberPositionMs
+import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
 import com.rhshourav.dhvon.data.settings.ProgressStyle
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
@@ -61,7 +62,7 @@ fun AudioModeUi(
 
     Box(Modifier.fillMaxSize().background(p.background)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.accent.copy(alpha = 0.5f), p.background), endY = 1500f)))
-        Column(Modifier.fillMaxSize().systemBarsPadding().displayCutoutPadding().padding(horizontal = 24.dp)) {
+        Column(Modifier.fillMaxSize().padding(rememberSymmetricInsets()).padding(horizontal = 24.dp)) {
             Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Close", tint = p.textPrimary) }
                 Spacer(Modifier.weight(1f))

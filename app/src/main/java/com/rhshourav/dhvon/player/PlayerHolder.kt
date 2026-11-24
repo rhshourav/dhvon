@@ -175,6 +175,12 @@ class PlayerHolder @Inject constructor(
         player.setSeekParameters(userSeekParams)
     }
 
+    /** ExoPlayer's own tag-based hint ("en" also matches "eng"); AudioTrackPicker then handles files whose tags are missing or wrong. */
+    fun setPreferredAudioLanguage(language: String?) {
+        val p = player
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setPreferredAudioLanguage(language).build()
+    }
+
     /** Drag start / double-tap: land on the nearest keyframe so scrubbing 4K .mkv / .ts / .avi stays instant. */
     fun beginScrub() = player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
 

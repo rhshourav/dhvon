@@ -64,6 +64,7 @@ data class AppSettings(
     val edgeBufferDp: Int = 32,                    // video gestures ignore touches this close to a screen edge
     val sleepCloseApp: Boolean = true,             // sleep timer also closes the app when it fires
     val safeHeadphoneVolume: Boolean = true,       // cap the volume + fade in when headphones connect
+    val preferEnglishAudio: Boolean = true,        // auto-pick the English audio track when a video has several
     val restoreSession: Boolean = true,            // bring back the last queue after the process is killed
 )
 
@@ -110,6 +111,7 @@ object Keys {
     val RESTORE_SESSION = booleanPreferencesKey("restore_session")
     val SLEEP_CLOSE = booleanPreferencesKey("sleep_close_app")
     val SAFE_HP_VOLUME = booleanPreferencesKey("safe_headphone_volume")
+    val PREFER_ENGLISH = booleanPreferencesKey("prefer_english_audio")
     val SESSION_QUEUE = stringPreferencesKey("session_queue")
     val SESSION_INDEX = intPreferencesKey("session_index")
     val SESSION_POS = longPreferencesKey("session_pos")
@@ -175,6 +177,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             restoreSession = p[Keys.RESTORE_SESSION] ?: d.restoreSession,
             sleepCloseApp = p[Keys.SLEEP_CLOSE] ?: d.sleepCloseApp,
             safeHeadphoneVolume = p[Keys.SAFE_HP_VOLUME] ?: d.safeHeadphoneVolume,
+            preferEnglishAudio = p[Keys.PREFER_ENGLISH] ?: d.preferEnglishAudio,
         )
     }
 

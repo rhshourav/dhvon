@@ -6,7 +6,7 @@
 <p align="center"><b>Every Sound. Every Frame.</b><br/>
 An offline-first, ad-free, premium video + audio player for Android.</p>
 
-<p align="center"><b>Version 2.0.0</b> — see the <a href="CHANGELOG.md">changelog</a></p>
+<p align="center"><b>Version 3.0.1</b> — see the <a href="CHANGELOG.md">changelog</a></p>
 
 <p align="center">
   Created by <a href="https://github.com/rhshourav"><b>rhshourav</b></a> ·

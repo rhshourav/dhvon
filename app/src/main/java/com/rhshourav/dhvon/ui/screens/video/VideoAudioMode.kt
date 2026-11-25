@@ -3,7 +3,16 @@
 package com.rhshourav.dhvon.ui.screens.video
 
 import android.content.res.Configuration
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -32,6 +41,7 @@ import com.rhshourav.dhvon.ui.components.MediaThumb
 import com.rhshourav.dhvon.ui.components.SilverIcon
 import com.rhshourav.dhvon.ui.components.rememberPositionMs
 import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
+import com.rhshourav.dhvon.ui.screens.EqualizerPanel
 import com.rhshourav.dhvon.data.settings.ProgressStyle
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
@@ -59,6 +69,7 @@ fun AudioModeUi(
     val fraction = scrub ?: if (dur > 0) (position.toFloat() / dur).coerceIn(0f, 1f) else 0f
     val shownMs = scrub?.let { (it * dur).toLong() } ?: position
     val art = remember(ui.mediaKey) { MediaFile(0, ui.mediaKey, ui.title, ui.title, dur, 0, 0, "", true) }
+    var eqOpen by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(p.background)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.accent.copy(alpha = 0.5f), p.background), endY = 1500f)))
@@ -74,19 +85,60 @@ fun AudioModeUi(
                 Row(Modifier.fillMaxSize().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
                     MediaThumb(art, Modifier.fillMaxHeight(0.82f).aspectRatio(1f).shadow(20.dp, RoundedCornerShape(24.dp), ambientColor = p.accent, spotColor = p.accent), RoundedCornerShape(24.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                        AudioControls(vm, ui, pb, settings, peaks, fraction, shownMs, onScrub = { scrub = it }, onSeek = { f -> scrub = null; vm.scrubTo((f * dur).toLong()) }, onShowVideo = onShowVideo)
+                        AudioControls(vm, ui, pb, settings, peaks, fraction, shownMs, onScrub = { scrub = it }, onSeek = { f -> scrub = null; vm.scrubTo((f * dur).toLong()) }, onShowVideo = onShowVideo, onOpenEq = { eqOpen = true })
                     }
                 }
             } else {
                 Spacer(Modifier.height(8.dp))
                 MediaThumb(art, Modifier.fillMaxWidth(0.86f).aspectRatio(1f).align(Alignment.CenterHorizontally).shadow(24.dp, RoundedCornerShape(28.dp), ambientColor = p.accent, spotColor = p.accent), RoundedCornerShape(28.dp))
                 Spacer(Modifier.height(24.dp))
-                AudioControls(vm, ui, pb, settings, peaks, fraction, shownMs, onScrub = { scrub = it }, onSeek = { f -> scrub = null; vm.scrubTo((f * dur).toLong()) }, onShowVideo = onShowVideo)
+                AudioControls(vm, ui, pb, settings, peaks, fraction, shownMs, onScrub = { scrub = it }, onSeek = { f -> scrub = null; vm.scrubTo((f * dur).toLong()) }, onShowVideo = onShowVideo, onOpenEq = { eqOpen = true })
+            }
+        }
+        EqOverlay(eqOpen, { eqOpen = false }, vm)
+    }
+}
+
+/**
+ * The full equalizer (signatures, Auto EQ, Lo-Fi, spatial, 10 bands with the live Post-EQ) as an in-screen bottom panel.
+ * It is drawn inside the activity instead of a dialog window, so the immersive system-bar hiding is never disturbed.
+ */
+@Composable
+private fun EqOverlay(open: Boolean, onClose: () -> Unit, vm: VideoPlayerViewModel) {
+    val p = LocalDhvon.current
+    val safe = rememberSymmetricInsets()
+    BackHandler(enabled = open, onBack = onClose)
+    Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(open, enter = fadeIn(), exit = fadeOut()) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onClose),
+            )
+        }
+        AnimatedVisibility(
+            open, Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
+        ) {
+            Column(
+                Modifier.widthIn(max = 560.dp).fillMaxWidth().fillMaxHeight(0.88f)
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(p.card)
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},   // taps inside never reach the scrim
+            ) {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Equalizer", color = p.textPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    IconButton(onClose) { Icon(Icons.Rounded.Close, "Close equalizer", tint = p.textSecondary) }
+                }
+                EqualizerPanel(
+                    vm.effects,
+                    Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+                        .padding(bottom = safe.calculateBottomPadding() + 16.dp),
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AudioControls(
     vm: VideoPlayerViewModel,
@@ -99,6 +151,7 @@ private fun AudioControls(
     onScrub: (Float) -> Unit,
     onSeek: (Float) -> Unit,
     onShowVideo: () -> Unit,
+    onOpenEq: () -> Unit,
 ) {
     val p = LocalDhvon.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -128,7 +181,9 @@ private fun AudioControls(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // FlowRow: three pills don't fit one line on a 360 dp phone, so they wrap instead of overflowing
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(Icons.Rounded.Tune, "Equalizer", onOpenEq)
             Pill(Icons.Rounded.Videocam, "Show video", onShowVideo)
             Pill(Icons.Rounded.Speed, "${ui.speed}x".replace(".0x", "x")) {
                 val steps = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)

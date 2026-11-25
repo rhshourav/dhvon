@@ -29,6 +29,19 @@ android {
         }
     }
 
+    // One APK per CPU architecture, plus a universal APK that runs on any device.
+    // libVLC and the FFmpeg decoder ship native libraries for every architecture, which is
+    // what makes a single APK so large; each phone only needs its own.
+    // Don't combine this with ndk { abiFilters }: the two conflict.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

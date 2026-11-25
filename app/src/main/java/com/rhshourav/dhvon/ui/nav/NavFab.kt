@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import com.rhshourav.dhvon.ui.components.DhvonLogo
+import com.rhshourav.dhvon.ui.components.PlayingEmblem
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
 /**
@@ -61,6 +61,7 @@ private fun MainButton(playing: Boolean, onClick: () -> Unit, modifier: Modifier
                 style = Stroke(3.dp.toPx()),
             )
         }
-        DhvonLogo(height = 30.dp)
+        // Silver emblem at rest; while anything plays the bars animate in the accent colour (the ring keeps spinning around them).
+        PlayingEmblem(playing)
     }
 }

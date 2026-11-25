@@ -170,8 +170,12 @@ class PlaybackController @Inject constructor(
         }
     }
 
+    /** The Resume button's way in: the player reopens in the mode (audio or video) you used last. */
     private fun openVideoUi() {
-        context.startActivity(Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(
+            Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(VideoPlayerActivity.EXTRA_RESTORE_LAST_MODE, true)
+        )
     }
 
     /**
@@ -192,7 +196,7 @@ class PlaybackController @Inject constructor(
         val siblings = lib.all.filter { it.folderPath == last.folderPath && it.isVideo == last.isVideo }
             .sortedBy { it.displayName.lowercase() }.ifEmpty { listOf(last) }
         val idx = siblings.indexOfFirst { it.uri == last.uri }.coerceAtLeast(0)
-        return if (last.isVideo) { playVideo(siblings, idx, last.folderPath); ResumeResult.VIDEO }
+        return if (last.isVideo) { playVideo(siblings, idx, last.folderPath, openInLastMode = true); ResumeResult.VIDEO }
         else { playAudio(siblings, idx, false, last.folderPath); ResumeResult.AUDIO }
     }
 
@@ -227,12 +231,15 @@ class PlaybackController @Inject constructor(
     // ------------------------------------------------------------------ starting playback
 
     /** Opens the video player; resumes from the last saved position when enabled in settings. */
-    fun playVideo(files: List<MediaFile>, index: Int, folderContext: String? = null) {
+    fun playVideo(files: List<MediaFile>, index: Int, folderContext: String? = null, openInLastMode: Boolean = false) {
         if (files.isEmpty()) return
         scope.launch {
             val resume = if (settings.settings.first().resumePlayback) resumePosition(files[index].uri) else null
             setQueue(files, index, resume ?: C.TIME_UNSET, shuffle = false, folderContext = folderContext)
-            context.startActivity(Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(
+                Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(VideoPlayerActivity.EXTRA_RESTORE_LAST_MODE, openInLastMode)
+            )
         }
     }
 

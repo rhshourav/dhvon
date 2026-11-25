@@ -55,7 +55,7 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
 
-            <!-- v3.0.1 — file managers that open .ts / .avi / .mkv / audio by *name* (generic or wrong MIME type, e.g. .ts → text/…).
+            <!-- v3.5.0 — file managers that open .ts / .avi / .mkv / audio by *name* (generic or wrong MIME type, e.g. .ts → text/…).
                  Android ignores path attributes unless a host is declared, so these live in their own filters with host="*";
                  adding them to the filter above would have required an extension in every content://…/media/123 URI.
                  pathPattern has no case-insensitivity and its ".*" doesn't span dots, hence lower-case names with 0–2 extra dots. -->

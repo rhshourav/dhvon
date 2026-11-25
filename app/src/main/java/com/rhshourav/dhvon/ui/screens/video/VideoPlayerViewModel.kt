@@ -96,11 +96,14 @@ class VideoPlayerViewModel @Inject constructor(
     val cues: StateFlow<List<Cue>> = _cues.asStateFlow()
 
     /** "Audio mode": the screen becomes an audio-player UI, the video renderer sleeps, sound keeps playing. */
-    private val _audioMode = MutableStateFlow(false)
+    // Read synchronously (a tiny flag) so the very first frame already shows the right mode — no video flash before audio mode.
+    private val modePrefs = context.getSharedPreferences("dhvon_player_state", Context.MODE_PRIVATE)
+    private val _audioMode = MutableStateFlow(modePrefs.getBoolean("audio_mode", false))
     val audioMode: StateFlow<Boolean> = _audioMode.asStateFlow()
 
     fun setAudioMode(on: Boolean) {
         _audioMode.value = on
+        modePrefs.edit().putBoolean("audio_mode", on).apply()      // Resume / Open reopen in whichever mode you used last
         holder.setVideoEnabled(!on)
         if (on && _fallback.value.active) {
             // Audio-only never needs the software video engine: hand the soundtrack back to ExoPlayer at the same spot.

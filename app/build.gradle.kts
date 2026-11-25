@@ -15,8 +15,8 @@ android {
         applicationId = "com.rhshourav.dhvon"
         minSdk = 26 // PiP + modern MediaStore; covers ~99% of active devices
         targetSdk = 36
-        versionCode = 3
-        versionName = "3.0.1"
+        versionCode = 4
+        versionName = "3.5.0"
         buildConfigField("String", "AUTHOR", "\"rhshourav\"")
         buildConfigField("String", "REPO_URL", "\"https://github.com/rhshourav/DHVON\"")
     }

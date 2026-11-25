@@ -295,7 +295,7 @@ class MediaRepository @Inject constructor(
      * Android 11+: one system dialog deletes the whole batch. Android 10: the dialog only unlocks a file, so the caller
      * re-runs this after consent (see onGrantResult) until nothing throws. Android 9 and older: needs the legacy write permission.
      * Files in folders added with "Add folder" are deleted through the document provider (needs the write grant requested
-     * since 3.0.1 — folders added earlier only hold a read grant).
+     * since 3.5.0 — folders added earlier only hold a read grant).
      */
     fun requestDelete(uris: List<Uri>): OpResult {
         val docs = uris.filter { DocumentsContract.isDocumentUri(context, it) }

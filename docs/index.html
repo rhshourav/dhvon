@@ -257,7 +257,7 @@ pre{font-size:12px}
 </div>
 <p class="hint r" style="text-align:left;margin-top:22px">Heads-up: Android 11 and newer hides non-media files (.dts, .ac3 …) from apps without all-files access, which DHVON never asks for. Use <b>Add folder</b> and DHVON’s own scanner finds every format.</p>
 <div class="c r" style="margin-top:28px"><h3>A smarter sleep timer</h3><p>Set it from the player’s quick settings. Stop after a set time, at the end of the track, or at the end of this video, and optionally close DHVON for good.</p><div class="tgl"><button id="sl" role="switch" aria-checked="false" aria-label="Close DHVON when the timer fires"><i></i></button><span>Close DHVON when it fires</span></div><p class="fn" id="slt">Playback stops. DHVON stays open.</p></div>
-<div class="cta" style="justify-content:flex-start;margin-top:28px"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Get<span class="vt">3.0.1</span></a></div>
+<div class="cta" style="justify-content:flex-start;margin-top:28px"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Get<span class="vt">the latest</span></a></div>
 </div></section>
 
 <div id="flow"><div class="s0">
@@ -313,8 +313,9 @@ pre{font-size:12px}
 <div class="c r" style="--i:5"><h3>Reduced motion</h3><p>If your OS asks for calm, every animation here yields.</p></div>
 </div></div></section>
 
-<section id="dl"><div class="w"><div class="dl r"><span class="k">Download</span><h2>Get <span class="g">DHVON.</span></h2><p id="ver">v3.0.1 · latest release</p>
+<section id="dl"><div class="w"><div class="dl r"><span class="k">Download</span><h2>Get <span class="g">DHVON.</span></h2><p id="ver">Latest release on GitHub</p>
 <div class="cta"><a class="b p apk" href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener">Download APK</a><a class="b" href="https://github.com/rhshourav/dhvon" rel="noopener">Source code</a></div>
+<p id="abi" hidden style="margin:18px auto 0;font-size:14px;color:var(--t2)">Want a smaller download? Per-architecture APKs (arm64-v8a, armeabi-v7a, x86_64) are on the <a href="https://github.com/rhshourav/dhvon/releases/latest" rel="noopener" style="border-bottom:1px solid var(--ac);color:var(--tx)">release page</a>.</p>
 <pre>git clone https://github.com/rhshourav/dhvon
 cd dhvon &amp;&amp; ./gradlew assembleRelease</pre><p id="note" style="margin-top:22px;font-size:14px"></p></div></div></section>
 
@@ -433,9 +434,9 @@ if(!rel||!rel.tag_name)try{rel=await J('https://api.github.com/repos/'+R+'/relea
 try{rp=await J('repo.json')}catch(e){}
 if(!rp||rp.stars==null)try{rp={stars:(await J('https://api.github.com/repos/'+R)).stargazers_count}}catch(e){}
 if(rp&&rp.stars!=null)$('#stars').textContent='★ '+Intl.NumberFormat('en',{notation:'compact'}).format(rp.stars);
-if(rel&&rel.tag_name){const a=(rel.assets||[]).find(a=>/\.apk$/i.test(a.name));
-$('#ver').textContent=rel.tag_name+' · '+new Date(rel.published_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})+(a?' · '+(a.size/1048576).toFixed(1)+' MB':'');
-if(a)$$('.apk').forEach(x=>x.href=a.browser_download_url);$$('.vt').forEach(x=>x.textContent=rel.tag_name.replace(/^v/i,''))}})();
+if(rel&&rel.tag_name){const ver=(rel.tag_name.match(/\d+(?:\.\d+)+/)||[rel.tag_name])[0],apks=(rel.assets||[]).filter(x=>/\.apk$/i.test(x.name)),a=apks.find(x=>/universal/i.test(x.name))||apks.find(x=>/arm64/i.test(x.name))||apks[0];
+$('#ver').textContent='v'+ver+' · '+new Date(rel.published_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})+(a?' · '+(a.size/1048576).toFixed(1)+' MB':'');
+if(a)$$('.apk').forEach(x=>x.href=a.browser_download_url);$$('.vt').forEach(x=>x.textContent=ver);$('#abi').hidden=apks.length<2}})();
 if(/Android/i.test(navigator.userAgent))$$('.apk').forEach(x=>x.textContent='Download for Android');
 else $('#note').textContent='DHVON is an Android app. Open this page on your phone, or grab the APK here.';
 </script>

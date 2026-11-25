@@ -66,6 +66,7 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
             }
         }
         handleIntent(intent)
+        applyLaunchMode(intent)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -93,6 +94,16 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
         window.attributes = window.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
         vm.resetDisplayToPhoneLevel()
         handleIntent(intent)
+        applyLaunchMode(intent)
+    }
+
+    /**
+     * The Resume and Open buttons reopen the player in the mode you used last (audio or video, remembered by the ViewModel).
+     * Tapping a particular video in a list always plays it as video; "Open with" (handled above) decides by file type.
+     */
+    private fun applyLaunchMode(intent: Intent?) {
+        if (intent == null || intent.action == Intent.ACTION_VIEW) return
+        if (!intent.getBooleanExtra(EXTRA_RESTORE_LAST_MODE, false)) vm.setAudioMode(false)
     }
 
     /** "Open with DHVON" from a file manager / browser download. */
@@ -180,4 +191,9 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
     }
 
     override fun finishPlayer() { finish() }
+
+    companion object {
+        /** Set by the Resume / Open buttons: reopen in the mode (audio or video) you used last. */
+        const val EXTRA_RESTORE_LAST_MODE = "dhvon.restore_last_mode"
+    }
 }

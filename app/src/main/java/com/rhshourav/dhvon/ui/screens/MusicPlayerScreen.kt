@@ -183,7 +183,7 @@ fun NowPlayingScreen(onBack: () -> Unit, vm: MusicPlayerViewModel = hiltViewMode
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm.playback::toggleShuffle) { Icon(Icons.Rounded.Shuffle, "Shuffle", tint = if (st.shuffle) p.accent else p.textPrimary, modifier = Modifier.size(26.dp)) }
+                ShuffleToggleButton(st.shuffleEnabled, vm.playback::toggleShuffle)
                 IconButton(vm.playback::previous, Modifier.size(56.dp)) { SilverIcon(Icons.Rounded.SkipPrevious, "Previous", Modifier.size(38.dp)) }
                 Box(Modifier.size(76.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { vm.playback.togglePlayPause() }, contentAlignment = Alignment.Center) {
                     Icon(if (st.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(44.dp))

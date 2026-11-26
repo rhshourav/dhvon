@@ -54,6 +54,13 @@ data class FolderHistoryEntity(@PrimaryKey val path: String, val openedAt: Long)
 @Entity(tableName = "folder_last_played")
 data class FolderLastPlayedEntity(@PrimaryKey val folderPath: String, val uri: String, val title: String, val updatedAt: Long)
 
+/**
+ * Every media URI the scanner has ever seen. [isNew] is true from the scan that first discovered the file until it is first played;
+ * the very first scan of a fresh install records the existing library with isNew = false so nothing floods with NEW badges.
+ */
+@Entity(tableName = "known_media")
+data class KnownMediaEntity(@PrimaryKey val uri: String, val firstSeenAt: Long, val isNew: Boolean)
+
 data class PlaylistSummary(val id: Long, val name: String, val itemCount: Int)
 
 @Dao
@@ -103,10 +110,20 @@ interface FolderLastPlayedDao {
     @Query("SELECT uri FROM folder_last_played WHERE folderPath = :path") fun last(path: String): Flow<String?>
 }
 
+@Dao
+interface KnownMediaDao {
+    @Query("SELECT uri FROM known_media") suspend fun allUris(): List<String>
+    @Query("SELECT COUNT(*) FROM known_media") suspend fun count(): Int
+    /** Room returns a List here; [com.rhshourav.dhvon.data.user.UserDataRepository.newUris] exposes it as a Set. */
+    @Query("SELECT uri FROM known_media WHERE isNew = 1") fun observeNewUris(): Flow<List<String>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAll(items: List<KnownMediaEntity>)
+    @Query("UPDATE known_media SET isNew = 0 WHERE uri = :uri") suspend fun markPlayed(uri: String)
+}
+
 @Database(
     entities = [PlaybackStateEntity::class, FavoriteEntity::class, PlaylistEntity::class,
-        PlaylistItemEntity::class, FolderHistoryEntity::class, FolderLastPlayedEntity::class],
-    version = 2,
+        PlaylistItemEntity::class, FolderHistoryEntity::class, FolderLastPlayedEntity::class, KnownMediaEntity::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class DhvonDatabase : RoomDatabase() {
@@ -115,4 +132,5 @@ abstract class DhvonDatabase : RoomDatabase() {
     abstract fun playlists(): PlaylistDao
     abstract fun folderHistory(): FolderHistoryDao
     abstract fun folderLastPlayed(): FolderLastPlayedDao
+    abstract fun knownMedia(): KnownMediaDao
 }

@@ -99,8 +99,9 @@ class FolderViewModel @Inject constructor(
     val lastPlayed: StateFlow<String?> = user.lastPlayedIn(path).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val query = MutableStateFlow("")
-    private val _selected = MutableStateFlow<Set<String>>(emptySet())
-    val selected: StateFlow<Set<String>> = _selected.asStateFlow()
+    /** Selected URIs in the order they were tapped (that order is the "Play in order" queue). */
+    private val _selected = MutableStateFlow<List<String>>(emptyList())
+    val selected: StateFlow<List<String>> = _selected.asStateFlow()
     private val _events = Channel<FileEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
@@ -133,9 +134,10 @@ class FolderViewModel @Inject constructor(
     }
 
     // selection
+    /** Unselected → appended to the end; selected → removed, the remaining items keep their relative order. */
     fun toggleSelect(uri: String) { _selected.update { if (uri in it) it - uri else it + uri } }
-    fun selectAll(items: List<MediaFile>) { _selected.value = items.map { it.uri }.toSet() }
-    fun clearSelection() { _selected.value = emptySet() }
+    fun selectAll(items: List<MediaFile>) { _selected.value = items.map { it.uri }.distinct() }
+    fun clearSelection() { _selected.value = emptyList() }
 
     // preferences
     fun setSort(by: SortBy) = viewModelScope.launch {
@@ -198,7 +200,7 @@ class FolderViewModel @Inject constructor(
 
     private suspend fun finish(op: PendingOp) {
         if (op is PendingOp.Delete && op.folderPath != null) withContext(Dispatchers.IO) { media.removeEmptyFolder(op.folderPath) }
-        media.refresh(); _selected.value = emptySet()
+        media.refresh(); _selected.value = emptyList()
         _events.send(FileEvent.Message(when (op) { is PendingOp.Delete -> "Deleted"; is PendingOp.Rename -> "Renamed"; is PendingOp.Move -> "Moved" }))
     }
 }
@@ -227,12 +229,22 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
     FileEventHost(vm.events) { ok, op -> vm.onGrantResult(ok, op) }
     BackHandler(enabled = selecting || searching) { if (selecting) vm.clearSelection() else { searching = false; vm.query.value = "" } }
 
-    val selectedFiles = ui.items.filter { it.uri in selected }
+    // Tap order is preserved: orderOf[uri] is the 1-based number on the selection mark and the position in "Play in order".
+    val orderOf = remember(selected) { selected.withIndex().associate { (i, uri) -> uri to i + 1 } }
+    val itemsByUri = remember(ui.items) { ui.items.associateBy { it.uri } }
+    val selectedFiles = remember(selected, itemsByUri) { selected.mapNotNull { itemsByUri[it] } }
     val actions = remember(ui.favorites) {
         MediaActions(vm.playback::playNext, vm.playback::addToQueue, { playlistTarget = listOf(it) }, { vm.toggleFavorite(it) }, { it.uri in ui.favorites })
     }
     fun open(f: MediaFile) {
         if (selecting) vm.toggleSelect(f.uri) else { vm.playback.playFrom(f, ui.items, vm.path); if (!f.isVideo) onOpenNowPlaying() }
+    }
+    // "Play in order": the selection becomes a temporary queue in exact tap order (audio, video or mixed); no playlist is touched.
+    fun playSelectedInOrder() {
+        val first = selectedFiles.firstOrNull() ?: return
+        vm.playback.playOrdered(selectedFiles)
+        vm.clearSelection()
+        if (!first.isVideo) onOpenNowPlaying()
     }
 
     // Jump to the file that was playing last in this folder (once, when the list first shows).
@@ -307,18 +319,22 @@ fun FolderBrowserScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: Fo
         }
 
         // ---- content
-        when {
-            ui.loaded && ui.items.isEmpty() -> EmptyState(Icons.Rounded.FolderOff, if (query.isNotBlank()) "No matches" else "Nothing here yet", if (query.isNotBlank()) "Try a different search." else "This folder has no playable media.")
-            s.viewMode == ViewMode.GRID -> LazyVerticalGrid(
-                GridCells.Adaptive(150.dp), state = gridState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                items(ui.items, key = { it.uri }) { f -> MediaGridCard(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, lastPlayed = f.uri == lastUri) }
-            }
-            else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(ui.items, key = { it.uri }) { f -> MediaListRow(f, f.uri in selected, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, actions = actions, lastPlayed = f.uri == lastUri) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                ui.loaded && ui.items.isEmpty() -> EmptyState(Icons.Rounded.FolderOff, if (query.isNotBlank()) "No matches" else "Nothing here yet", if (query.isNotBlank()) "Try a different search." else "This folder has no playable media.")
+                s.viewMode == ViewMode.GRID -> LazyVerticalGrid(
+                    GridCells.Adaptive(150.dp), state = gridState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(ui.items, key = { it.uri }) { f -> MediaGridCard(f, f.uri in orderOf, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, lastPlayed = f.uri == lastUri, selectionOrder = orderOf[f.uri]) }
+                }
+                else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+                    items(ui.items, key = { it.uri }) { f -> MediaListRow(f, f.uri in orderOf, selecting, { open(f) }, { vm.toggleSelect(f.uri) }, actions = actions, lastPlayed = f.uri == lastUri, selectionOrder = orderOf[f.uri]) }
+                }
             }
         }
+        // ---- ordered multi-select: bottom action bar
+        if (selectedFiles.isNotEmpty()) PlayQueueBar(selectedFiles.size, { playSelectedInOrder() })
     }
 
     // ---- dialogs

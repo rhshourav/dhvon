@@ -77,6 +77,7 @@ import com.rhshourav.dhvon.R
 import com.rhshourav.dhvon.data.settings.ProgressStyle
 import com.rhshourav.dhvon.domain.formatDuration
 import com.rhshourav.dhvon.ui.components.DhvonSeekBar
+import com.rhshourav.dhvon.ui.components.ShuffleToggleButton
 import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
 import com.rhshourav.dhvon.ui.components.rememberPositionMs
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
@@ -515,6 +516,18 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
                             IconButton({ host.finishPlayer() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
                             Text(ui.title, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
                             if (fb.active) EngineBadge()
+                            // Title row (not the 9-button action row, which already fills a 360 dp phone).
+                            ShuffleToggleButton(
+                                active = ui.shuffleEnabled,
+                                onClick = {
+                                    poke()
+                                    val on = !ui.shuffleEnabled
+                                    vm.toggleShuffle()
+                                    Toast.makeText(ctx, if (on) "Shuffle on" else "Shuffle off", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(40.dp), offTint = Color.White,
+                                enabled = pb.queue.size > 1 || ui.shuffleEnabled,
+                            )
                             if (landscape) topActions()
                         }
                         if (!landscape) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { topActions() }
@@ -586,6 +599,7 @@ fun VideoPlayerScreen(vm: VideoPlayerViewModel, host: PlayerHost, inPip: Boolean
             ) {
                 VideoPlaylistPanel(
                     pb.queue, pb.currentIndex,
+                    shuffleEnabled = ui.shuffleEnabled, onToggleShuffle = { vm.toggleShuffle() },
                     onPick = { vm.playback.skipTo(it); playlistOpen = false },
                     onRemove = { vm.playback.removeFromQueue(it) },
                     onClose = { playlistOpen = false },

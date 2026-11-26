@@ -32,6 +32,13 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** v2 → v3: adds the NEW-badge bookkeeping table; favorites, playlists and history are left untouched. */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `known_media` (`uri` TEXT NOT NULL, `firstSeenAt` INTEGER NOT NULL, `isNew` INTEGER NOT NULL, PRIMARY KEY(`uri`))")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -40,13 +47,14 @@ object AppModule {
 
     @Provides @Singleton
     fun database(@ApplicationContext ctx: Context): DhvonDatabase =
-        Room.databaseBuilder(ctx, DhvonDatabase::class.java, "dhvon.db").addMigrations(MIGRATION_1_2).fallbackToDestructiveMigration(true).build()
+        Room.databaseBuilder(ctx, DhvonDatabase::class.java, "dhvon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).fallbackToDestructiveMigration(true).build()
 
     @Provides fun playbackDao(db: DhvonDatabase): PlaybackDao = db.playback()
     @Provides fun favoriteDao(db: DhvonDatabase): FavoriteDao = db.favorites()
     @Provides fun playlistDao(db: DhvonDatabase): PlaylistDao = db.playlists()
     @Provides fun folderHistoryDao(db: DhvonDatabase): FolderHistoryDao = db.folderHistory()
     @Provides fun folderLastPlayedDao(db: DhvonDatabase): FolderLastPlayedDao = db.folderLastPlayed()
+    @Provides fun knownMediaDao(db: DhvonDatabase): KnownMediaDao = db.knownMedia()
 
     @Provides @Singleton
     fun dataStore(@ApplicationContext ctx: Context): DataStore<Preferences> =

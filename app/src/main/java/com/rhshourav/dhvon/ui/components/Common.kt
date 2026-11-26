@@ -15,12 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,9 @@ import com.rhshourav.dhvon.ui.theme.LocalDhvon
 import kotlinx.coroutines.delay
 
 val LocalArtworkLoader = staticCompositionLocalOf<ArtworkLoader?> { null }
+
+/** URIs that currently carry the NEW badge. Provided once at the app root; only the rows that read it recompose when it changes. */
+val LocalNewUris = compositionLocalOf<Set<String>> { emptySet() }
 
 /** Polls the live playback position (the player doesn't push position ticks). */
 @Composable
@@ -108,6 +113,56 @@ fun GradientBar(fraction: Float, modifier: Modifier = Modifier, height: Dp = 6.d
     val p = LocalDhvon.current
     Box(modifier.height(height).clip(CircleShape).background(track)) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).clip(CircleShape).background(p.accent))
+    }
+}
+
+/** Compact "NEW" pill for files discovered by a scan and not played yet. */
+@Composable
+fun NewBadge(modifier: Modifier = Modifier) {
+    val p = LocalDhvon.current
+    Text(
+        "NEW", color = Color.White, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp,
+        maxLines = 1, softWrap = false,
+        modifier = modifier.clip(RoundedCornerShape(6.dp)).background(p.accent).padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+/**
+ * Shuffle toggle shared by the music player, the video player (controls + playlist panel) and audio mode.
+ * On: accent-tinted icon with a small indicator dot underneath. Off: [offTint] (secondary text colour by default).
+ */
+@Composable
+fun ShuffleToggleButton(
+    active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
+    offTint: Color = LocalDhvon.current.textSecondary, iconSize: Dp = 26.dp, enabled: Boolean = true,
+) {
+    val p = LocalDhvon.current
+    val tint by animateColorAsState(if (active) p.accent else offTint, label = "shuffle_tint")
+    IconButton(onClick, modifier.alpha(if (enabled) 1f else 0.35f), enabled = enabled) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Shuffle, if (active) "Shuffle on" else "Shuffle off", tint = tint, modifier = Modifier.size(iconSize))
+            if (active) Box(Modifier.align(Alignment.BottomCenter).offset(y = 7.dp).size(4.dp).clip(CircleShape).background(p.accent))
+        }
+    }
+}
+
+/** Bottom action bar of a multi-select: starts the temporary queue in the exact order the items were tapped. */
+@Composable
+fun PlayQueueBar(count: Int, onPlay: () -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalDhvon.current
+    Row(
+        modifier.fillMaxWidth().background(p.card).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("$count in queue", color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            Text("Plays in the order you tapped", color = p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Button(onPlay, colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White)) {
+            Icon(Icons.Rounded.PlayArrow, null, Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Play in order")
+        }
     }
 }
 
@@ -197,23 +252,33 @@ fun MediaMenu(file: MediaFile, actions: MediaActions) {
     }
 }
 
+/** Round selection marker. With [orderNumber] (1-based) it shows the tap order instead of a check, so a multi-select doubles as a play order. */
 @Composable
-private fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier) {
+fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier, orderNumber: Int? = null) {
     val p = LocalDhvon.current
     Box(
         modifier.size(22.dp).clip(CircleShape).background(if (selected) p.accent else Color.Black.copy(alpha = 0.45f))
             .border(1.5.dp, Color.White.copy(alpha = 0.85f), CircleShape),
         contentAlignment = Alignment.Center,
-    ) { if (selected) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+    ) {
+        if (selected && orderNumber != null) {
+            Text(
+                orderNumber.toString(), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, lineHeight = 12.sp,
+                fontSize = when { orderNumber >= 100 -> 8.sp; orderNumber >= 10 -> 10.sp; else -> 12.sp },
+            )
+        } else if (selected) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+    }
 }
 
 @Composable
 fun MediaListRow(
     file: MediaFile, selected: Boolean, selectionMode: Boolean,
     onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, actions: MediaActions? = null, lastPlayed: Boolean = false,
+    selectionOrder: Int? = null,
 ) {
     val p = LocalDhvon.current
     val pad = if (LocalCompact.current) 6.dp else 10.dp
+    val isNew = file.uri in LocalNewUris.current
     Row(
         modifier.fillMaxWidth().background(if (selected) p.accent.copy(alpha = 0.16f) else if (lastPlayed) p.accent.copy(alpha = 0.08f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = pad),
@@ -221,11 +286,17 @@ fun MediaListRow(
     ) {
         Box {
             MediaThumb(file, Modifier.then(if (file.isVideo) Modifier.width(96.dp).height(56.dp) else Modifier.size(56.dp)), RoundedCornerShape(12.dp), showDuration = file.isVideo)
-            if (selectionMode) SelectionMark(selected, Modifier.align(Alignment.TopStart).padding(4.dp))
+            if (selectionMode) SelectionMark(selected, Modifier.align(Alignment.TopStart).padding(4.dp), selectionOrder)
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(file.title, color = if (lastPlayed) p.accent else p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    file.title, color = if (lastPlayed) p.accent else p.textPrimary, style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+                if (isNew) { Spacer(Modifier.width(6.dp)); NewBadge() }
+            }
             val sub = if (file.isVideo) listOfNotNull(file.resolutionLabel, formatSize(file.sizeBytes)).joinToString(" • ")
             else listOf(file.artist.ifBlank { "Unknown artist" }, formatDuration(file.durationMs)).joinToString(" • ")
             Text(if (lastPlayed) "Last played · $sub" else sub, color = if (lastPlayed) p.accent else p.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -235,14 +306,19 @@ fun MediaListRow(
 }
 
 @Composable
-fun MediaGridCard(file: MediaFile, selected: Boolean, selectionMode: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, lastPlayed: Boolean = false) {
+fun MediaGridCard(
+    file: MediaFile, selected: Boolean, selectionMode: Boolean, onClick: () -> Unit, onLongClick: () -> Unit,
+    modifier: Modifier = Modifier, lastPlayed: Boolean = false, selectionOrder: Int? = null,
+) {
     val p = LocalDhvon.current
+    val isNew = file.uri in LocalNewUris.current
     Column(modifier.clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         Box {
             MediaThumb(file, Modifier.fillMaxWidth().aspectRatio(if (file.isVideo) 1.6f else 1f), RoundedCornerShape(14.dp), showDuration = file.isVideo)
             if (selected) Box(Modifier.matchParentSize().clip(RoundedCornerShape(14.dp)).background(p.accent.copy(alpha = 0.35f)))
             if (lastPlayed) Box(Modifier.matchParentSize().border(2.dp, p.accent, RoundedCornerShape(14.dp)))
-            if (selectionMode) SelectionMark(selected, Modifier.align(Alignment.TopStart).padding(8.dp))
+            if (selectionMode) SelectionMark(selected, Modifier.align(Alignment.TopStart).padding(8.dp), selectionOrder)
+            if (isNew) NewBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(file.title, color = if (lastPlayed) p.accent else p.textPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -254,8 +330,12 @@ fun MediaGridCard(file: MediaFile, selected: Boolean, selectionMode: Boolean, on
 @Composable
 fun MediaCard(file: MediaFile, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 148.dp) {
     val p = LocalDhvon.current
+    val isNew = file.uri in LocalNewUris.current
     Column(modifier.width(width).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)) {
-        MediaThumb(file, Modifier.fillMaxWidth().aspectRatio(1.45f), RoundedCornerShape(14.dp), showPlay = true)
+        Box(Modifier.fillMaxWidth()) {
+            MediaThumb(file, Modifier.fillMaxWidth().aspectRatio(1.45f), RoundedCornerShape(14.dp), showPlay = true)
+            if (isNew) NewBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
+        }
         Spacer(Modifier.height(6.dp))
         Text(file.title, color = p.textPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(formatDuration(file.durationMs), color = p.textSecondary, style = MaterialTheme.typography.bodySmall)

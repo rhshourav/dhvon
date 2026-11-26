@@ -1,21 +1,15 @@
-# DHVON CI: builds a debug APK on every push so compile problems surface immediately.
+# DHVON CI: a compile check that runs ONLY when you start it by hand.
+# GitHub -> Actions -> "Android CI" -> "Run workflow".
+# Nothing is stored by default: no artifacts and no build cache.
 name: Android CI
 
 on:
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-  pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
   workflow_dispatch:
+    inputs:
+      upload_apk:
+        description: 'Keep the debug APKs as a download for 1 day (uses artifact storage)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,26 +34,24 @@ jobs:
       # every run failed at this step. v4 no longer installs it.
       - uses: android-actions/setup-android@v4
 
+      # Caching is off, so nothing is saved to your repository's Actions cache.
+      # Set cache-disabled to false if you want faster builds and don't mind the cache.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
 
       # Files added through the GitHub web UI can lose their executable bit.
       - name: Make the Gradle wrapper executable
         run: chmod +x gradlew
 
-      # The Android Gradle Plugin downloads the exact SDK platform (compileSdk 37)
-      # and build-tools it needs, so no manual sdkmanager step is required.
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - uses: actions/upload-artifact@v4
+      # Skipped unless you tick "upload_apk" when you run the workflow.
+      - name: Keep the APKs for 1 day
+        if: ${{ inputs.upload_apk }}
+        uses: actions/upload-artifact@v4
         with:
           name: dhvon-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-
-      - name: Upload build reports on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-reports
-          path: app/build/reports/
-          if-no-files-found: ignore
+          retention-days: 1

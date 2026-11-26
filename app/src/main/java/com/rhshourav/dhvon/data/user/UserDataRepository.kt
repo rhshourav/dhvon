@@ -17,12 +17,26 @@ class UserDataRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val folderDao: FolderHistoryDao,
     private val lastPlayedDao: FolderLastPlayedDao,
+    private val knownMediaDao: KnownMediaDao,
 ) {
     val recent: Flow<List<PlaybackStateEntity>> = playback.recent(30)
     val continueWatching: Flow<List<PlaybackStateEntity>> = playback.continueWatching(20)
     val favorites: Flow<Set<String>> = favoritesDao.all().map { it.toSet() }
     val playlists: Flow<List<PlaylistSummary>> = playlistDao.summaries()
     val lastFolder: Flow<String?> = folderDao.last()
+
+    /** URIs still wearing the NEW badge: discovered by a scan and not played since. */
+    val newUris: Flow<Set<String>> = knownMediaDao.observeNewUris().map { it.toSet() }
+
+    /**
+     * Playback of [uri] started: its NEW badge goes away. Once the baseline scan has happened, a file played before the scanner
+     * ever saw it ("Open with" from a file manager) is recorded as seen too, so the next scan doesn't badge it. Before the baseline
+     * exists nothing is inserted — an early row would make the first scan think the library had already been baselined.
+     */
+    suspend fun markPlayed(uri: String) {
+        if (knownMediaDao.count() > 0) knownMediaDao.insertAll(listOf(KnownMediaEntity(uri, System.currentTimeMillis(), isNew = false)))
+        knownMediaDao.markPlayed(uri)
+    }
 
     suspend fun positionFor(uri: String): PlaybackStateEntity? = playback.get(uri)
     suspend fun savePosition(e: PlaybackStateEntity) = playback.upsert(e)

@@ -49,7 +49,7 @@ data class PlaybackUiState(
     val isPlaying: Boolean = false,
     val buffering: Boolean = false,
     val durationMs: Long = 0,
-    val shuffle: Boolean = false,
+    val shuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val queue: List<QueueEntry> = emptyList(),
     val currentIndex: Int = 0,
@@ -81,8 +81,13 @@ class PlaybackController @Inject constructor(
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) scheduleQueueSave()
             else if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) saveSession(fullQueue = false)
             if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) recordLastPlayed(player.currentMediaItem)
+            // A file that really starts — or auto-advances into — playback loses its NEW badge (a restored, still-paused queue does not).
+            if (player.playWhenReady && events.containsAny(
+                    Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_IS_PLAYING_CHANGED)
+            ) markPlayed(player.currentMediaItem?.mediaId)
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) saveSession(fullQueue = false) }
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { publish(holder.player, rebuildQueue = false) }
 
         /** A queued/restored file that no longer exists shouldn't wedge the player: skip it, or clear the queue. */
         override fun onPlayerError(error: PlaybackException) {
@@ -170,6 +175,15 @@ class PlaybackController @Inject constructor(
         }
     }
 
+    private var lastMarkedPlayed: String? = null
+
+    /** Clears [uri]'s NEW badge. Public for entry points that start playback outside the queue ("Open with DHVON"). */
+    fun markPlayed(uri: String?) {
+        if (uri.isNullOrEmpty() || uri == lastMarkedPlayed) return
+        lastMarkedPlayed = uri
+        scope.launch { userData.markPlayed(uri) }
+    }
+
     /** The Resume button's way in: the player reopens in the mode (audio or video) you used last. */
     private fun openVideoUi() {
         context.startActivity(
@@ -220,7 +234,7 @@ class PlaybackController @Inject constructor(
             isPlaying = p.isPlaying,
             buffering = p.playbackState == Player.STATE_BUFFERING,
             durationMs = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: item?.durationHint ?: 0L,
-            shuffle = p.shuffleModeEnabled,
+            shuffleEnabled = p.shuffleModeEnabled,
             repeatMode = p.repeatMode,
             queue = queue,
             currentIndex = p.currentMediaItemIndex,
@@ -267,6 +281,12 @@ class PlaybackController @Inject constructor(
             if (first.isVideo) context.startActivity(Intent(context, VideoPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
+
+    /**
+     * Temporary queue from a multi-selection: plays [files] exactly in the order given (shuffle off), audio, video or mixed.
+     * Nothing is written to any playlist. [playFrom] is not used because it keeps only items of the first file's type.
+     */
+    fun playOrdered(files: List<MediaFile>) = playMixed(files, 0, shuffle = false)
 
     /** ACTION_VIEW / "Open with DHVON". Audio files opened this way are queued as audio (the video screen shows its audio mode). */
     fun playExternal(uri: String, title: String, isVideo: Boolean = true) {
@@ -335,6 +355,11 @@ class PlaybackController @Inject constructor(
         p.seekTo((p.currentPosition + deltaMs).coerceIn(0, dur))
     }
     fun skipTo(index: Int) = holder.player.seekTo(index, C.TIME_UNSET)
+    /**
+     * Flips shuffle for the whole queue while the current item keeps playing. This is also what makes the LibVLC software fallback
+     * shuffle correctly: while VLC plays the current file, ExoPlayer stays parked on that same item as the queue authority
+     * (VideoPlayerViewModel.onVlcEnded asks it for the next item), so re-ordering it re-orders — or restores — what VLC plays next.
+     */
     fun toggleShuffle() {
         val p = holder.player
         val on = !p.shuffleModeEnabled

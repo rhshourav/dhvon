@@ -117,6 +117,7 @@ class VideoPlayerActivity : ComponentActivity(), PlayerHost {
         val isAudio = SupportedMediaFormats.classify(name, runCatching { contentResolver.getType(data) }.getOrNull()) == MediaKind.AUDIO
         vm.setAudioMode(isAudio)
         playback.playExternal(data.toString(), name.substringBeforeLast('.'), isVideo = !isAudio)
+        playback.markPlayed(data.toString())     // an externally opened file never keeps a NEW badge
     }
 
     // ---------------------------------------------------------------- lifecycle: PiP + background audio

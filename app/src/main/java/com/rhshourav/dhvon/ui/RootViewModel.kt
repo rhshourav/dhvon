@@ -14,6 +14,7 @@ import com.rhshourav.dhvon.player.AudioEffectsController
 import com.rhshourav.dhvon.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -32,6 +33,11 @@ class RootViewModel @Inject constructor(
 
     /** URIs that currently carry the NEW badge; provided to the whole UI through LocalNewUris. */
     val newUris: StateFlow<Set<String>> = user.newUris.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Folder paths that hold at least one file still tagged NEW; a folder loses its tag once every new file in it has been played. */
+    val newFolders: StateFlow<Set<String>> = combine(media.library, newUris) { lib, fresh ->
+        if (fresh.isEmpty()) emptySet<String>() else lib.all.asSequence().filter { it.uri in fresh }.map { it.folderPath }.toSet()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     /** Called once the user has granted media access (or picked a SAF folder). */
     fun onMediaAccess() { media.start(); effects.start(); playback.restoreLastSession() }

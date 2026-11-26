@@ -45,6 +45,9 @@ val LocalArtworkLoader = staticCompositionLocalOf<ArtworkLoader?> { null }
 /** URIs that currently carry the NEW badge. Provided once at the app root; only the rows that read it recompose when it changes. */
 val LocalNewUris = compositionLocalOf<Set<String>> { emptySet() }
 
+/** Folder paths containing at least one NEW file (see RootViewModel.newFolders). */
+val LocalNewFolderPaths = compositionLocalOf<Set<String>> { emptySet() }
+
 /** Polls the live playback position (the player doesn't push position ticks). */
 @Composable
 fun rememberPositionMs(player: Player, intervalMs: Long = 250L): State<Long> =
@@ -371,7 +374,10 @@ fun FolderRow(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Mod
         Icon(Icons.Rounded.Folder, null, tint = p.accent, modifier = Modifier.size(46.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(folder.name, color = p.textPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(folder.name, color = p.textPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (folder.path in LocalNewFolderPaths.current) { Spacer(Modifier.width(8.dp)); NewBadge() }
+            }
             Text(folder.summary, color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
         }
         Text(formatDate(folder.lastModifiedSec), color = p.textSecondary, style = MaterialTheme.typography.labelMedium)
@@ -395,6 +401,7 @@ fun FolderCard(folder: MediaFolder, onClick: () -> Unit, modifier: Modifier = Mo
                 }
             }
             if (onDelete != null) FolderMenu(onDelete, Modifier.align(Alignment.TopEnd).padding(6.dp), onMedia = true)
+            if (folder.path in LocalNewFolderPaths.current) NewBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Column(Modifier.padding(12.dp)) {
             Text(folder.name, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

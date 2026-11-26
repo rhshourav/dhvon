@@ -28,6 +28,7 @@ import com.rhshourav.dhvon.domain.MediaFile
 import com.rhshourav.dhvon.domain.formatDuration
 import com.rhshourav.dhvon.player.QueueEntry
 import com.rhshourav.dhvon.ui.components.MediaThumb
+import com.rhshourav.dhvon.ui.components.ShuffleToggleButton
 import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
 import com.rhshourav.dhvon.ui.theme.LocalDhvon
 
@@ -42,6 +43,8 @@ fun VideoPlaylistPanel(
     onPick: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onClose: () -> Unit,
+    shuffleEnabled: Boolean,
+    onToggleShuffle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val p = LocalDhvon.current
@@ -61,6 +64,7 @@ fun VideoPlaylistPanel(
                 Text("Playlist", color = p.textPrimary, style = MaterialTheme.typography.titleMedium)
                 Text("${entries.size} item${if (entries.size == 1) "" else "s"} · now playing ${(current + 1).coerceAtLeast(1)}", color = p.textSecondary, style = MaterialTheme.typography.bodySmall)
             }
+            ShuffleToggleButton(shuffleEnabled, onToggleShuffle, enabled = entries.size > 1 || shuffleEnabled)
             IconButton(onClose) { Icon(Icons.Rounded.Close, "Close", tint = p.textSecondary) }
         }
         LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 12.dp)) {

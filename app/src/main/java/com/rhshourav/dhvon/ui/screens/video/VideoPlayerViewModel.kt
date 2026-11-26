@@ -55,6 +55,7 @@ data class VideoUiState(
     val videoHeight: Int = 0,
     val speed: Float = 1f,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val shuffleEnabled: Boolean = false,
     val decoder: DecoderMode = DecoderMode.HW,
     val audioTracks: List<TrackOption> = emptyList(),
     val embeddedSubs: List<TrackOption> = emptyList(),
@@ -384,7 +385,7 @@ class VideoPlayerViewModel @Inject constructor(
                 title = p.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty(),
                 mediaKey = p.currentMediaItem?.mediaId.orEmpty(),
                 videoWidth = size.width, videoHeight = size.height,
-                speed = p.playbackParameters.speed, repeatMode = p.repeatMode, decoder = holder.decoderMode,
+                speed = p.playbackParameters.speed, repeatMode = p.repeatMode, shuffleEnabled = p.shuffleModeEnabled, decoder = holder.decoderMode,
             )
         }
     }
@@ -513,6 +514,8 @@ class VideoPlayerViewModel @Inject constructor(
     fun setBackgroundPlay(on: Boolean) = viewModelScope.launch { settingsRepo.set(Keys.BG_PLAY, on) }
     fun setSpeed(speed: Float) = playback.setSpeed(speed)
     fun setRepeat(mode: Int) = playback.setRepeat(mode)
+    /** Works for ExoPlayer and for the LibVLC fallback alike: ExoPlayer stays the queue authority, see PlaybackController.toggleShuffle. */
+    fun toggleShuffle() = playback.toggleShuffle()
     fun togglePlay() = playback.togglePlayPause()
     fun scrubTo(ms: Long) = playback.seekTo(ms)
     fun consumeNotice() = _ui.update { it.copy(notice = null) }

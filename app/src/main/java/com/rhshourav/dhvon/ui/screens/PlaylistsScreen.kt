@@ -2,8 +2,10 @@
 // Created by rhshourav · https://github.com/rhshourav/DHVON · GPL-3.0-or-later
 package com.rhshourav.dhvon.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -124,6 +126,8 @@ class PlaylistDetailViewModel @Inject constructor(
     fun persistOrder(list: List<PlaylistItemEntity>) = viewModelScope.launch { user.reorder(list) }
     fun remove(item: PlaylistItemEntity) = viewModelScope.launch { user.removePlaylistItem(item.id) }
     fun play(list: List<PlaylistItemEntity>, index: Int, shuffle: Boolean = false) = playback.playMixed(list.map { it.toMediaFile() }, index, shuffle)
+    /** Temporary queue from a multi-selection, in the order given. Never written back to the playlist. */
+    fun playOrdered(items: List<PlaylistItemEntity>) = playback.playOrdered(items.map { it.toMediaFile() })
 }
 
 @Composable
@@ -137,18 +141,40 @@ fun PlaylistDetailScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: P
     val listState = rememberLazyListState()
     val reorder = rememberReorderableLazyListState(listState) { from, to -> local.add(to.index, local.removeAt(from.index)) }
 
+    // Ordered multi-select (long-press to start): item ids in tap order. Ids rather than URIs, so a track that sits in the
+    // playlist twice can be picked - and queued - twice.
+    var selection by remember { mutableStateOf<List<Long>>(emptyList()) }
+    val orderOf = remember(selection) { selection.withIndex().associate { (i, id) -> id to i + 1 } }
+    val selectedItems = selection.mapNotNull { id -> local.firstOrNull { it.id == id } }
+    val selecting = selectedItems.isNotEmpty()
+    fun toggle(item: PlaylistItemEntity) { selection = if (item.id in selection) selection - item.id else selection + item.id }
+    BackHandler(enabled = selecting) { selection = emptyList() }
+
     fun play(index: Int, shuffle: Boolean = false) {
         vm.play(local.toList(), index, shuffle)
         if (!shuffle && local.getOrNull(index)?.isVideo == false) onOpenNowPlaying()
         if (shuffle) onOpenNowPlaying()
     }
+    // "Play in order": the selection becomes a temporary queue in exact tap order (audio, video or mixed); the playlist itself is untouched.
+    fun playSelectedInOrder() {
+        val first = selectedItems.firstOrNull() ?: return
+        vm.playOrdered(selectedItems)
+        selection = emptyList()
+        if (!first.isVideo) onOpenNowPlaying()
+    }
 
     Column(Modifier.fillMaxSize().background(p.background)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = p.textPrimary) }
-            Text(playlist?.name.orEmpty(), color = p.textPrimary, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (selecting) {
+                IconButton({ selection = emptyList() }) { Icon(Icons.Rounded.Close, "Clear selection", tint = p.textPrimary) }
+                Text("${selectedItems.size} selected", color = p.textPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton({ selection = local.map { it.id } }) { Icon(Icons.Rounded.SelectAll, "Select all", tint = p.textPrimary) }
+            } else {
+                IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = p.textPrimary) }
+                Text(playlist?.name.orEmpty(), color = p.textPrimary, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
         }
-        if (local.isNotEmpty()) {
+        if (local.isNotEmpty() && !selecting) {
             Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button({ play(0) }, colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White)) {
                     Icon(Icons.Rounded.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play all")
@@ -157,18 +183,24 @@ fun PlaylistDetailScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: P
             }
         }
         if (local.isEmpty()) EmptyState(Icons.AutoMirrored.Rounded.PlaylistPlay, "This playlist is empty", "Long-press files in any folder, then choose “Add to playlist”.")
-        LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
             items(local, key = { it.id }) { item ->
                 ReorderableItem(reorder, key = item.id) { dragging ->
+                    val picked = item.id in orderOf
                     Row(
-                        Modifier.fillMaxWidth().shadow(if (dragging) 8.dp else 0.dp).background(if (dragging) p.elevated else p.background)
-                            .clickable { play(local.indexOf(item)) }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().shadow(if (dragging) 8.dp else 0.dp)
+                            .background(if (dragging) p.elevated else if (picked) p.accent.copy(alpha = 0.16f) else p.background)
+                            .combinedClickable(onClick = { if (selecting) toggle(item) else play(local.indexOf(item)) }, onLongClick = { toggle(item) })
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton({}, modifier = Modifier.draggableHandle(onDragStopped = { vm.persistOrder(local.toList()) })) {
                             Icon(Icons.Rounded.DragHandle, "Reorder", tint = p.textSecondary)
                         }
-                        MediaThumb(item.toMediaFile(), Modifier.size(width = if (item.isVideo) 84.dp else 52.dp, height = 52.dp), RoundedCornerShape(10.dp))
+                        Box {
+                            MediaThumb(item.toMediaFile(), Modifier.size(width = if (item.isVideo) 84.dp else 52.dp, height = 52.dp), RoundedCornerShape(10.dp))
+                            if (selecting) SelectionMark(picked, Modifier.align(Alignment.TopStart).padding(4.dp), orderOf[item.id])
+                        }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(item.title, color = p.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -179,5 +211,7 @@ fun PlaylistDetailScreen(onBack: () -> Unit, onOpenNowPlaying: () -> Unit, vm: P
                 }
             }
         }
+        // ---- ordered multi-select: bottom action bar
+        if (selectedItems.isNotEmpty()) PlayQueueBar(selectedItems.size, { playSelectedInOrder() })
     }
 }

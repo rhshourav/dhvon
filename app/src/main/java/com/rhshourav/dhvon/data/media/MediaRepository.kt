@@ -24,6 +24,8 @@ import android.provider.MediaStore.Audio.Media as AudioMedia
 import android.provider.MediaStore.Video.Media as VideoMedia
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import com.rhshourav.dhvon.data.local.KnownMediaDao
+import com.rhshourav.dhvon.data.local.KnownMediaEntity
 import com.rhshourav.dhvon.data.settings.SettingsRepository
 import com.rhshourav.dhvon.di.ApplicationScope
 import com.rhshourav.dhvon.domain.*
@@ -56,6 +58,7 @@ sealed interface OpResult {
 class MediaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
+    private val knownMedia: KnownMediaDao,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
     data class Library(
@@ -92,7 +95,24 @@ class MediaRepository @Inject constructor(
             trees.forEach { runCatching { scanTree(it.toUri(), v, a) } }
             Library(v.sortedByDescending { it.dateModifiedSec }, a.sortedByDescending { it.dateModifiedSec }, true)
         }
+        runCatching { trackNewMedia(lib.all) }
         _library.value = lib
+    }
+
+    /**
+     * NEW-badge bookkeeping, run after every scan (MediaStore + SAF folders).
+     *  - first ever scan (known_media empty): the existing library is recorded with isNew = false, so nothing is badged;
+     *  - later scans: every URI not seen before is recorded with isNew = true. Known URIs are never touched, so played or
+     *    already-seen files are not re-tagged. A scan that found nothing is ignored so a transient empty result can't become the baseline.
+     */
+    private suspend fun trackNewMedia(files: List<MediaFile>) {
+        if (files.isEmpty()) return
+        val known = knownMedia.allUris().toHashSet()
+        val baseline = known.isEmpty()
+        val now = System.currentTimeMillis()
+        val fresh = files.asSequence().map { it.uri }.distinct().filter { it !in known }
+            .map { KnownMediaEntity(uri = it, firstSeenAt = now, isNew = !baseline) }.toList()
+        if (fresh.isNotEmpty()) knownMedia.insertAll(fresh)
     }
 
     private fun mediaChanges() = callbackFlow<Unit> {

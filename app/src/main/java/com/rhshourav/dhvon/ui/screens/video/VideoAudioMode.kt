@@ -38,6 +38,7 @@ import com.rhshourav.dhvon.domain.formatDuration
 import com.rhshourav.dhvon.player.PlaybackUiState
 import com.rhshourav.dhvon.ui.components.DhvonSeekBar
 import com.rhshourav.dhvon.ui.components.MediaThumb
+import com.rhshourav.dhvon.ui.components.ShuffleToggleButton
 import com.rhshourav.dhvon.ui.components.SilverIcon
 import com.rhshourav.dhvon.ui.components.rememberPositionMs
 import com.rhshourav.dhvon.ui.components.rememberSymmetricInsets
@@ -169,7 +170,7 @@ private fun AudioControls(
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(vm.playback::toggleShuffle) { Icon(Icons.Rounded.Shuffle, "Shuffle", tint = if (pb.shuffle) p.accent else p.textPrimary) }
+            ShuffleToggleButton(pb.shuffleEnabled, vm::toggleShuffle)
             IconButton({ vm.playback.previous() }, Modifier.size(52.dp)) { SilverIcon(Icons.Rounded.SkipPrevious, "Previous", Modifier.size(36.dp)) }
             Box(Modifier.size(72.dp).clip(CircleShape).background(Color(0xFFF5F7FA)).clickable { vm.togglePlay() }, contentAlignment = Alignment.Center) {
                 Icon(if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = Color(0xFF08090D), modifier = Modifier.size(42.dp))

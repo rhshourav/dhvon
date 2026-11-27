@@ -10,6 +10,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
@@ -24,10 +25,15 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import com.rhshourav.dhvon.data.settings.DecoderMode
 import com.rhshourav.dhvon.data.settings.SeekSnap
+import com.rhshourav.dhvon.di.ApplicationScope
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,7 +63,9 @@ class DhvonRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioOutputPlaybackParams: Boolean,
     ): AudioSink? = DefaultAudioSink.Builder(context)
-        .setEnableFloatOutput(enableFloatOutput)
+        // Must stay false: with float output on, DefaultAudioSink bypasses the AudioProcessorChain — and with it DhvonAudioProcessor.
+        // The processor does its math in Float32 internally and hands the sink 16-bit PCM.
+        .setEnableFloatOutput(false)
         .setAudioProcessors(arrayOf<AudioProcessor>(processor))
         .build()
 
@@ -69,6 +77,24 @@ class DhvonRenderersFactory(
             DecoderMode.SW -> all.sortedBy { if (it.softwareOnly) 0 else 1 }
         }
     }
+}
+
+/** Short codec name for the audio diagnostics; unknown MIME types fall back to their sub-type. */
+private fun codecLabel(mime: String?): String = when (mime) {
+    null -> ""
+    "audio/flac" -> "FLAC"; "audio/mpeg", "audio/mpeg-L2" -> "MP3"; "audio/mp4a-latm" -> "AAC"; "audio/alac" -> "ALAC"
+    "audio/opus" -> "Opus"; "audio/vorbis" -> "Vorbis"; "audio/ac3" -> "AC3"; "audio/eac3", "audio/eac3-joc" -> "EAC3"
+    "audio/vnd.dts" -> "DTS"; "audio/vnd.dts.hd" -> "DTS-HD"; "audio/true-hd" -> "TrueHD"; "audio/raw" -> "PCM"
+    else -> mime.substringAfter('/').uppercase().take(8)
+}
+
+/** PCM bit depth when the container states it; 0 for compressed formats, whose decoded depth isn't a property of the source. */
+private fun pcmBitDepth(encoding: Int): Int = when (encoding) {
+    C.ENCODING_PCM_8BIT -> 8
+    C.ENCODING_PCM_16BIT, C.ENCODING_PCM_16BIT_BIG_ENDIAN -> 16
+    C.ENCODING_PCM_24BIT, C.ENCODING_PCM_24BIT_BIG_ENDIAN -> 24
+    C.ENCODING_PCM_32BIT, C.ENCODING_PCM_32BIT_BIG_ENDIAN, C.ENCODING_PCM_FLOAT -> 32
+    else -> 0
 }
 
 /**
@@ -96,6 +122,8 @@ class PlayerHolder @Inject constructor(
     @ApplicationContext private val context: Context,
     /** Shared by every ExoPlayer this holder builds; also feeds the live Post-EQ in [AudioEffectsController]. */
     val audioProcessor: DhvonAudioProcessor,
+    private val usbDac: UsbDacManager,
+    @ApplicationScope private val scope: CoroutineScope,
 ) {
 
     var decoderMode: DecoderMode = DecoderMode.HW
@@ -107,6 +135,33 @@ class PlayerHolder @Inject constructor(
     private val _player = MutableStateFlow(create(DecoderMode.HW))
     val playerFlow: StateFlow<ExoPlayer> = _player.asStateFlow()
     val player: ExoPlayer get() = _player.value
+
+    private var formatPlayer: ExoPlayer? = null
+    private var formatListener: Player.Listener? = null
+
+    init {
+        // Bit-perfect only counts once Android has CONFIRMED it (UsbDacManager); until then the DSP tap keeps running.
+        scope.launch { usbDac.diagnostics.map { it.bitPerfectConfirmedActive }.distinctUntilChanged().collect { audioProcessor.bypassForBitPerfect = it } }
+        // Tell the diagnostics what is playing; re-attached whenever a decoder switch rebuilds the player.
+        scope.launch { playerFlow.collect { watchTrackFormat(it) } }
+    }
+
+    private fun watchTrackFormat(p: ExoPlayer) {
+        formatListener?.let { formatPlayer?.removeListener(it) }
+        val l = object : Player.Listener { override fun onTracksChanged(tracks: Tracks) = reportSourceFormat(tracks) }
+        formatListener = l
+        formatPlayer = p
+        p.addListener(l)
+        reportSourceFormat(p.currentTracks)
+    }
+
+    /** Codec, sample rate and (when the container states it) bit depth of the selected audio track → [UsbDacManager]. */
+    private fun reportSourceFormat(tracks: Tracks) {
+        val format = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+            ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it) } }
+        if (format == null) { usbDac.onTrackFormatChanged("", 0, 0); return }
+        usbDac.onTrackFormatChanged(codecLabel(format.sampleMimeType), format.sampleRate.coerceAtLeast(0), pcmBitDepth(format.pcmEncoding))
+    }
 
     private fun create(mode: DecoderMode): ExoPlayer {
         // .ts fixes: look ~282 KB ahead so late PAT/PMT tables (and their video PIDs) are found, accept non-IDR keyframes,

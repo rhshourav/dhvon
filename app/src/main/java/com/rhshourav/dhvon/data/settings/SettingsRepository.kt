@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -66,7 +68,68 @@ data class AppSettings(
     val safeHeadphoneVolume: Boolean = true,       // cap the volume + fade in when headphones connect
     val preferEnglishAudio: Boolean = true,        // auto-pick the English audio track when a video has several
     val restoreSession: Boolean = true,            // bring back the last queue after the process is killed
+    // ---- USB DAC / per-transport profiles
+    val bitPerfectUsbEnabled: Boolean = false,     // ask Android 14+ for bit-perfect output on a USB DAC (DSP is bypassed while it is confirmed)
+    val autoDeviceProfileEnabled: Boolean = true,  // switch the EQ profile when a USB DAC / Bluetooth device connects
+    val usbDacPresetId: String = "CHU_II_USB",     // SoundSignature name applied when a USB DAC connects
+    val bluetoothPresetId: String = "KZ_XTRA_FIX", // SoundSignature name applied when Bluetooth audio connects
+    val wiredPresetId: String = "",                // profile (built-in name or custom id) for a wired headset; "" = keep current
+    val speakerPresetId: String = "",              // profile for the phone speaker; "" = keep current
+    val customProfiles: List<UserSoundProfile> = emptyList(),
 )
+
+/** The equalizer has 14 ISO-spaced bands (31 Hz … 16 kHz). Anything persisted with another length is never indexed blindly. */
+const val EQ_BAND_COUNT = 14
+
+/** A band list of the right size is kept (clamped to ±12 dB); any other size — e.g. one saved by the 10-band release — resets to flat. */
+fun normalizeBandGains(raw: List<Float>): List<Float> =
+    if (raw.size == EQ_BAND_COUNT) raw.map { if (it.isFinite()) it.coerceIn(-12f, 12f) else 0f } else List(EQ_BAND_COUNT) { 0f }
+
+/** A saved EQ profile: the 14 band gains plus the crossfeed mix and the adaptive-EQ flag it was saved with. */
+data class UserSoundProfile(
+    val id: String,
+    val name: String,
+    val bandGainsDb: List<Float>, // Always normalized to size 14
+    val crossfeedMix: Float = 0f,
+    val adaptiveEqEnabled: Boolean = false,
+)
+
+fun encodeCustomProfiles(profiles: List<UserSoundProfile>): String {
+    val arr = JSONArray()
+    profiles.forEach { p ->
+        val obj = JSONObject().apply {
+            put("id", p.id)
+            put("name", p.name)
+            put("crossfeedMix", p.crossfeedMix.toDouble())
+            put("adaptiveEqEnabled", p.adaptiveEqEnabled)
+            put("bands", JSONArray().apply {
+                List(EQ_BAND_COUNT) { idx -> p.bandGainsDb.getOrElse(idx) { 0f } }.forEach { put(it.toDouble()) }
+            })
+        }
+        arr.put(obj)
+    }
+    return arr.toString()
+}
+
+/** One damaged entry is skipped instead of losing every saved profile. */
+fun decodeCustomProfiles(raw: String): List<UserSoundProfile> {
+    if (raw.isBlank()) return emptyList()
+    val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+    return (0 until arr.length()).mapNotNull { i ->
+        runCatching {
+            val obj = arr.getJSONObject(i)
+            val bandsArr = obj.getJSONArray("bands")
+            val rawBands = List(bandsArr.length()) { b -> bandsArr.getDouble(b).toFloat() }
+            UserSoundProfile(
+                id = obj.getString("id"),
+                name = obj.getString("name"),
+                bandGainsDb = normalizeBandGains(rawBands),
+                crossfeedMix = obj.optDouble("crossfeedMix", 0.0).toFloat().coerceIn(0f, 0.5f),
+                adaptiveEqEnabled = obj.optBoolean("adaptiveEqEnabled", false),
+            )
+        }.getOrNull()
+    }
+}
 
 object Keys {
     val THEME = stringPreferencesKey("theme")
@@ -123,6 +186,16 @@ object Keys {
     val DSP_CUSTOM_BANDS = stringPreferencesKey("dsp_custom_bands")
     val DSP_SPATIAL_ON = booleanPreferencesKey("dsp_spatial_on")
     val DSP_SPATIAL_STRENGTH = intPreferencesKey("dsp_spatial_strength")
+    // ---- USB DAC / per-transport profiles
+    val BIT_PERFECT_USB = booleanPreferencesKey("bit_perfect_usb")
+    val AUTO_DEVICE_PROFILE = booleanPreferencesKey("auto_device_profile")
+    val USB_DAC_PRESET = stringPreferencesKey("usb_dac_preset_id")
+    val BLUETOOTH_PRESET = stringPreferencesKey("bluetooth_preset_id")
+    val WIRED_PRESET = stringPreferencesKey("wired_preset_id")
+    val SPEAKER_PRESET = stringPreferencesKey("speaker_preset_id")
+    val CUSTOM_PROFILES = stringPreferencesKey("custom_sound_profiles_json")
+    val DSP_CROSSFEED = floatPreferencesKey("dsp_crossfeed")
+    val DSP_ACTIVE_CUSTOM = stringPreferencesKey("dsp_active_custom_profile")
     fun lrcFor(uriHash: Int) = stringPreferencesKey("lrc_$uriHash")
 }
 
@@ -178,6 +251,13 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             sleepCloseApp = p[Keys.SLEEP_CLOSE] ?: d.sleepCloseApp,
             safeHeadphoneVolume = p[Keys.SAFE_HP_VOLUME] ?: d.safeHeadphoneVolume,
             preferEnglishAudio = p[Keys.PREFER_ENGLISH] ?: d.preferEnglishAudio,
+            bitPerfectUsbEnabled = p[Keys.BIT_PERFECT_USB] ?: d.bitPerfectUsbEnabled,
+            autoDeviceProfileEnabled = p[Keys.AUTO_DEVICE_PROFILE] ?: d.autoDeviceProfileEnabled,
+            usbDacPresetId = p[Keys.USB_DAC_PRESET] ?: d.usbDacPresetId,
+            bluetoothPresetId = p[Keys.BLUETOOTH_PRESET] ?: d.bluetoothPresetId,
+            wiredPresetId = p[Keys.WIRED_PRESET] ?: d.wiredPresetId,
+            speakerPresetId = p[Keys.SPEAKER_PRESET] ?: d.speakerPresetId,
+            customProfiles = decodeCustomProfiles(p[Keys.CUSTOM_PROFILES].orEmpty()),
         )
     }
 
